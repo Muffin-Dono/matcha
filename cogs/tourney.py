@@ -212,12 +212,19 @@ class Tourney(commands.Cog):
     # Command to clear the selection state
     @app_commands.command(name="clear", description="Clears the map selection state")
     async def clear_command(self, interaction: discord.Interaction):
-        get_state(interaction.channel_id)
+        selection_state = get_state(interaction.channel_id)
+
+        if selection_state["teams"] and not (has_admin_privileges(interaction.user)
+                or user_is_on_team(interaction.user, selection_state["teams"]["team1"])
+                or user_is_on_team(interaction.user, selection_state["teams"]["team2"])):
+            await interaction.response.send_message(
+                f"Only **{selection_state["teams"]["team1"]}**, **{selection_state["teams"]["team2"]}**, or an Organizer can clear this map selection.", ephemeral=True)
+            return
 
         state_handler.pop(interaction.channel_id, None)
         await clear_timeout(interaction.channel_id)
         await interaction.response.send_message(
-            "Map selection has been cleared. Use `/match` to start again.")
+            "Map selection has been cleared. Use **`/match`** to start again.")
 
     # Command to start map selection, with team assignment and coin toss
     @app_commands.command(name="match", description="Set the tournament and opposing teams for a match")
@@ -385,7 +392,7 @@ class Tourney(commands.Cog):
 
         if selection_state["coin_toss_winner"] is None:
             await interaction.response.send_message(
-                "No coin toss winner! Please use `/match` first to select teams.", ephemeral=True)
+                "No coin toss winner! Please use **`/match`** first to select teams.", ephemeral=True)
             return
 
         if selection_state["ban_order"]:
@@ -462,7 +469,7 @@ class Tourney(commands.Cog):
         # Validate the ban order
         if not selection_state["ban_order"]:
             await interaction.response.send_message(
-                "The ban order hasn't been decided yet! Use `/order` to decide the ban order.", ephemeral=True)
+                "The ban order hasn't been decided yet! Use **`/order`** to decide the ban order.", ephemeral=True)
             return
 
         first_to_ban = selection_state["ban_order"][0]
