@@ -191,21 +191,22 @@ class MoreButtons(discord.ui.View):
             return
 
         if interaction.user.id not in queue['players']:
-            await interaction.response.send_message("Only queued players may ping the queue.", ephemeral=True)
+            await interaction.response.send_message("Only queued players may :bell: **Ping Queue**.", ephemeral=True)
             return
         
+        # Minimum of six players required to ping the queue
         if len(queue['players']) < 6:
             await interaction.response.send_message(
-                ":exclamation:**Don't Ping Queue yet**\n\n"
-                "Aim for 10 players (5v5) first before you Ping Queue.\n"
-                "If you want to start with less players (3v3, 4v4), ask the queue first.",
+                "## :exclamation:**Not Enough Players**\n"
+                "- Aim for more players (e.g. 5v5) before you :bell: **Ping Queue**.\n"
+                "- You may :bell: **Ping Queue** earlier and play smaller teams (e.g. 3v3 or 4v4), but **check with the queue first :handshake:**.",
                 ephemeral=True)
             return
         
         retry_after = ping_cd.update_rate_limit(interaction)
         if retry_after:
             minutes = int(retry_after // 60)
-            await interaction.response.send_message(f"Ping is on cooldown. Try again in {minutes} minutes. :hourglass_flowing_sand:", ephemeral=True)
+            await interaction.response.send_message(f":bell: **Ping Queue** is on cooldown. Try again in {minutes} minutes. :hourglass_flowing_sand:", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -213,12 +214,12 @@ class MoreButtons(discord.ui.View):
         for user_id in queue['players'][:10]:
             player = interaction.guild.get_member(user_id)
 
-            await player.send(f"<@{interaction.user.id}> has pinged everyone in the queue! :bell:\n"
+            await player.send(f"{interaction.user.mention} has pinged everyone in the queue! :bell:\n"
                               f"> <#{interaction.channel_id}>\n\n"
                               "Gather in VC and make teams! :sound:",
                               allowed_mentions=discord.AllowedMentions(users=False))
             
-        await interaction.followup.send(f"**<@{interaction.user.id}> has pinged everyone in the queue! :bell:**",
+        await interaction.followup.send(f"**{interaction.user.mention} has pinged everyone in the queue! :bell:**",
                                         allowed_mentions=discord.AllowedMentions(users=True))
 
     @discord.ui.button(label="Map Vote", style=discord.ButtonStyle.blurple, emoji="\U0001f5fa")
@@ -244,7 +245,7 @@ class MainButtons(discord.ui.View):
             return
 
         await interaction.response.send_message(
-            f"<@{interaction.user.id}> has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
             allowed_mentions=discord.AllowedMentions(users=False))
         
         asyncio.create_task(update_queue(interaction.client, interaction.channel_id))
@@ -259,7 +260,7 @@ class MainButtons(discord.ui.View):
             return
 
         await interaction.response.send_message(
-            f"<@{interaction.user.id}> has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
             allowed_mentions=discord.AllowedMentions(users=False))
         
         asyncio.create_task(update_queue(interaction.client, interaction.channel_id))
@@ -334,7 +335,7 @@ class Pug(commands.Cog):
             await interaction.response.send_message("You are already in the queue.", ephemeral=True)
         else:
             await interaction.response.send_message(
-                f"<@{interaction.user.id}> has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                f"{interaction.user.mention} (`@{interaction.user.display_name}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
                 allowed_mentions=discord.AllowedMentions(users=False))
 
         asyncio.create_task(update_queue(interaction.client, interaction.channel_id))
@@ -349,12 +350,12 @@ class Pug(commands.Cog):
             await interaction.response.send_message("You are not in the queue.", ephemeral=True)
         else:
             await interaction.response.send_message(
-                f"<@{interaction.user.id}> has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                f"{interaction.user.mention} (`@{interaction.user.display_name}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
                 allowed_mentions=discord.AllowedMentions(users=False))
 
         asyncio.create_task(update_queue(interaction.client, interaction.channel_id))
 
-    # Command to kick a player from the queue
+    # Command to remove a player from the queue
     @app_commands.command(name="remove", description="Remove a player from the PUG queue")
     async def remove_command(self, interaction: discord.Interaction, player: discord.Member):
         queue = get_state(interaction.channel_id)
@@ -365,11 +366,11 @@ class Pug(commands.Cog):
             return
 
         await interaction.response.send_message(
-            f"<@{interaction.user.id}> has removed <@{player.id}> from the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+            f"{interaction.user.mention} has removed {player.mention} from the queue -----> **{len(queue['players'])} player(s) in queue**\n",
             allowed_mentions=discord.AllowedMentions(users=False))
 
         await player.send(
-            f"<@{interaction.user.id}> has removed you from the queue. :door:\n"
+            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has removed you from the queue. :door:\n"
             f"> <#{interaction.channel_id}>\n\n")
 
         asyncio.create_task(update_queue(interaction.client, interaction.channel_id))
