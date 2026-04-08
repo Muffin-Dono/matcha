@@ -43,32 +43,37 @@ timeout_tasks = {}
 TIMEOUT_DURATION = 72*60*60  # 72 hours
 TIMEOUT_NOTICE = 12*60*60 # 12 hours
 
-async def timeout_clear(channel_id, interaction):
+async def timeout_clear(bot: commands.Bot, channel_id):
     try:
         notice_delay = TIMEOUT_DURATION - TIMEOUT_NOTICE
 
         await asyncio.sleep(notice_delay)
 
-        await interaction.followup.send(
+        channel = await bot.fetch_channel(channel_id)
+        await channel.send(
             f"Map selection will be cleared in {TIMEOUT_NOTICE/(60*60)} hour(s) if no further commands are used.")
 
         await asyncio.sleep(TIMEOUT_NOTICE)
 
+        # Clear map selection
         state_handler.pop(channel_id, None)
         timeout_tasks.pop(channel_id, None)
-        await interaction.followup.send(
-            f"Map selection has timed out after {TIMEOUT_DURATION/(60*60)} hour(s) of inactivity and has been cleared.")
-        
-        await clear_timeout(channel_id)
+
+        await channel.send(
+            f"Map selection has timed out after {TIMEOUT_DURATION/(60*60)} hours of inactivity and has been cleared.")
+
+        guild = channel.guild
+        log.info(f"Clearing map selection in {channel}, {guild}...")
 
     except asyncio.CancelledError:
         pass
 
 # Function to reset the timeout counter
-def reset_timeout_counter(channel_id, interaction):
+def reset_timeout_counter(bot: commands.Bot, channel_id):
     if channel_id in timeout_tasks:
         timeout_tasks[channel_id].cancel()
-    task = asyncio.create_task(timeout_clear(channel_id, interaction))
+
+    task = asyncio.create_task(timeout_clear(bot, channel_id))
     timeout_tasks[channel_id] = task
 
 # Function to remove any active timeout counters in the channel
@@ -262,13 +267,6 @@ class Tourney(commands.Cog):
 
         # If user is not an organizer they should be in one of the opposing teams
         if not has_admin_privileges(interaction.user):
-            user_role_ids = {role.id for role in interaction.user.roles}
-
-            user_teams = [
-                name for name, info in TEAM_ROLES.items()
-                if info["id"] in user_role_ids
-            ]
-
             if not (user_is_on_team(interaction.user, resolved_team1)
                     or user_is_on_team(interaction.user, resolved_team2)
                     or "Mixed Team" in {resolved_team1, resolved_team2}):
@@ -328,7 +326,7 @@ class Tourney(commands.Cog):
                 + "\n- ".join(missing_roles))
 
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.channel_id, interaction)
+        reset_timeout_counter(interaction.client, interaction.channel_id)
 
     # Show user choice of tournaments
     @match_command.autocomplete('pool')
@@ -411,7 +409,7 @@ class Tourney(commands.Cog):
             await interaction.response.send_message(
                 "Please choose one of the given options.", ephemeral=True)
             return
-        
+
         if not has_admin_privileges(interaction.user) and override == "Yes":
             await interaction.response.send_message(
                 "Only organizers can override this phase!", ephemeral=True)
@@ -427,7 +425,7 @@ class Tourney(commands.Cog):
             f"**{trim_team_name(selection_state['ban_order'][0])}**, please ban a map using **`/map_ban`**.")
 
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.channel_id, interaction)
+        reset_timeout_counter(interaction.client, interaction.channel_id)
 
     # Show user the two options (First or Second)
     @order_command.autocomplete('choice')
@@ -442,7 +440,7 @@ class Tourney(commands.Cog):
             discord.app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt
         ]
-    
+
     # Show user the two options (Yes or No)
     @order_command.autocomplete('override')
     async def order_override_autocomplete(
@@ -506,7 +504,7 @@ class Tourney(commands.Cog):
             await interaction.response.send_message(
                 f"Only {trim_team_name(banning_team)} can ban right now.", ephemeral=True)
             return
-        
+
         if not has_admin_privileges(interaction.user) and override == "Yes":
             await interaction.response.send_message(
                 "Only organizers can override this phase!", ephemeral=True)
@@ -544,7 +542,7 @@ class Tourney(commands.Cog):
                 f"**{trim_team_name(picking_team)}**, please pick a map using **`/map_pick`**.")
 
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.channel_id, interaction)
+        reset_timeout_counter(interaction.client, interaction.channel_id)
 
     # Show user the choice of maps to ban
     @map_ban_command.autocomplete('map')
@@ -560,7 +558,7 @@ class Tourney(commands.Cog):
             discord.app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt
         ]
-    
+
     # Show user the two options (Yes or No)
     @map_ban_command.autocomplete('override')
     async def map_ban_override_autocomplete(
@@ -603,7 +601,7 @@ class Tourney(commands.Cog):
             await interaction.response.send_message(
                 f"Only {trim_team_name(picking_team)} can pick a map right now.", ephemeral=True)
             return
-        
+
         if not has_admin_privileges(interaction.user) and override == "Yes":
             await interaction.response.send_message(
                 "Only organizers can override this phase!", ephemeral=True)
@@ -673,7 +671,7 @@ class Tourney(commands.Cog):
                 "-# To invoke the Wildcard, both teams must agree. Otherwise, the selection will default to the Standard map pool.")
 
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.channel_id, interaction)
+        reset_timeout_counter(interaction.client, interaction.channel_id)
 
     # Show user the choice of maps to pick
     @map_pick_command.autocomplete('map')
@@ -690,7 +688,7 @@ class Tourney(commands.Cog):
             discord.app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt
         ]
-    
+
     # Show user the two options (Yes or No)
     @map_pick_command.autocomplete('override')
     async def map_pick_override_autocomplete(

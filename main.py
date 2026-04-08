@@ -34,17 +34,17 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-class MatchManager(commands.Bot):
+class Matcha(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=intents)
-    
+
     async def reset_nickname(self):
         await self.wait_until_ready()
-        
+
         for guild in self.guilds:
             me = guild.me
             await me.edit(nick=None)
-            print("Nickname successfully reset")
+            print(f"Nickname successfully reset in {guild}")
 
     async def setup_hook(self):
         for filename in os.listdir("./cogs"):
@@ -55,17 +55,17 @@ class MatchManager(commands.Bot):
             ):
                 await self.load_extension(f"cogs.{filename[:-3]}")
                 print(f"Loaded cog: {filename}")
-        
+
         asyncio.create_task(self.reset_nickname())
-        
+
         # guild = discord.Object(id=server)
-        
+
         # # Clear command tree
         # self.tree.clear_commands(guild=guild)
-        
+
         # Global sync
         synced = await self.tree.sync()
         print(f"Synced {len(synced)} commands to guild {server}")
 
-bot = MatchManager()
+bot = Matcha()
 bot.run(token)

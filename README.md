@@ -1,5 +1,5 @@
-# ANP Match Manager
-ANP Match Manager is a Discord bot that supports two major functions for competition:
+# Matcha
+Matcha is a Discord bot that supports two major functions for competition:
 - Tournament map selection for matches
 - Pick-up game (PUG) queue management
 
@@ -69,7 +69,7 @@ Players can currently:
 
 ## Hosting the Bot Yourself
 
-To host the **ANP Match Manager** bot yourself, follow these steps:
+To host the **Matcha** bot yourself, follow these steps:
 
 1. **Configuration**
    - Create an `.env` file in the root of the project. This should include your Discord bot token (`DISCORD_TOKEN`) and your Discord guild ID (`DISCORD_GUILD`).
