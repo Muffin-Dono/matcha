@@ -1,9 +1,11 @@
 # Matcha
-Matcha is a Discord bot that supports two major functions for competition:
-- Tournament map selection for matches
-- Pick-up game (PUG) queue management
+Matcha is a Discord bot that supports match management in two ways:
+- Map selection for tournament matches
+- Queue management for pick-up games (PUGs)
 
-Although the bot was initially built to organize competition in the video game **NEOTOKYO°**, it is planned to eventually support a wider range of games, map pools, and tournament formats.
+While the bot was initially built to organize competition in the video game **NEOTOKYO°**, it is now planned to support a wider range of games, map pools, and tournament formats in the future.
+
+---
 
 ## Tournament Map Selection
 
@@ -25,14 +27,14 @@ The tournament map selection process is as follows:
 
 ## PUG Queue
 
-The PUG queue system is simple and designed to have all the essential features available in a single embed, the **PUG Panel**. More features are planned for the future and these will be available from the "Actions" button.
+The PUG queue system is simple and designed to have all the essential features available in a single embed, the **PUG Panel**. Additional bonus options are planned for the future and will be available from the "Actions" menu.
 
 Players can currently:
 - Join and leave a queue
 - See who is currently queued
 - Ping the queue (with cooldown) when enough players are ready
 - Receive a DM notification to gather in voice and form teams
-- Expand the PUG Panel with the Actions button to access bonus options
+- Access bonus options by clicking the Actions button in the PUG Panel
 
 **PUG Panel Actions Button Menu**
 - **Ping Queue**
@@ -48,7 +50,7 @@ Players can currently:
 
 ### Help
 - **`/help pug`** Help options for PUG queue
-- **`/help tourney`** Help options for Tournament map selection
+- **`/help tourney`** Help options for tournament map selection
 
 ### Tournament Commands
 - **`/clear`** Clears the bot and resets the map selection process.
@@ -86,7 +88,7 @@ To host the **Matcha** bot yourself, follow these steps:
    - The bot requires the **"Manage Nicknames"** permission to automatically update its nickname to reflect the number of players in the PUG queue.
 
 5. **Configure Your Commands**
-   - You may only want one of the two major functions of this bot. You can restrict usage of the bot's commands to channels, roles, and users.
+   - You may only want one of the two major functions of this bot. You can restrict usage of the bot's commands to specific channels, roles, and users.
    - Go to the following settings and edit the commands accordingly:
      - **Server Settings** -> **Apps** -> **Integrations** -> **Command Permissions**
 
