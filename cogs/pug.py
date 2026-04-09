@@ -203,7 +203,7 @@ class MoreButtons(discord.ui.View):
             return
 
         # Minimum of six players required to ping the queue
-        if len(queue['players']) < 6:
+        if not any(role.permissions.administrator for role in interaction.user.roles) and len(queue['players']) < 6:
             await interaction.response.send_message(
                 "## :exclamation:**Not Enough Players**\n"
                 "- Aim for more players (e.g. 5v5) before you :bell: **Ping Queue**.\n"
