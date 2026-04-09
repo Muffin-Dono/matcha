@@ -35,7 +35,7 @@ async def timeout_clear(bot: commands.Bot, channel_id):
         # Notify channel that queue has been cleared
         channel = await bot.fetch_channel(channel_id)
         await channel.send(
-            f"PUG queue has been cleared of all players due to {int(TIMEOUT_DURATION // (60*60))} hours of inactivity. :hourglass:")
+            f"PUG queue has been cleared of all players due to {int(TIMEOUT_DURATION // (60*60))} hours of inactivity. :pouring_liquid:")
 
         guild = channel.guild
         log.info(f"Clearing PUG queue in {channel}, {guild}...")
@@ -103,11 +103,17 @@ async def refresh_panel(bot: commands.Bot, channel_id: int):
     if channel_id not in panel_messages:
         return
 
-    channel = await bot.fetch_channel(channel_id)
-    panel_message = await channel.fetch_message(panel_messages[channel_id])
+    # Create necessary variables for refreshing panels
+    channel = bot.get_channel(channel_id)
     panel = build_main_panel_embed(channel_id)
+    main_buttons = MainButtons()
 
-    await panel_message.edit(embed=panel, view=MainButtons())
+    for panel_message in reversed(panel_messages[channel_id]):
+        try:
+            msg = await channel.fetch_message(panel_message)
+            await msg.edit(embed=panel, view=main_buttons)
+        except discord.NotFound:
+            pass
 
 # Build Actions panel embed
 def build_more_panel_embed(channel_id: int):
@@ -324,12 +330,21 @@ class Pug(commands.Cog):
     @app_commands.command(name="pug", description="Open the PUG panel and view the queue")
     async def pug_command(self, interaction: discord.Interaction):
         main_panel = build_main_panel_embed(interaction.channel_id)
-        await interaction.response.send_message(embed=main_panel, view=MainButtons())
 
-        save_panel_message = await interaction.original_response()
+        main_buttons = MainButtons()
 
-        panel_message = await interaction.channel.fetch_message(save_panel_message.id)
-        panel_messages[interaction.channel_id] = panel_message.id
+        await interaction.response.send_message(embed=main_panel, view=main_buttons)
+
+        panel_message = await interaction.original_response()
+
+        if interaction.channel_id not in panel_messages:
+            panel_messages[interaction.channel_id] = []
+
+        # Store the message ID in dict
+        panel_messages[interaction.channel_id].append(panel_message.id)
+
+        # Only store up to 5 messages
+        panel_messages[interaction.channel_id] = panel_messages[interaction.channel_id][-5:]
 
     # Command to join the queue
     @app_commands.command(name="join", description="Join the PUG queue")
@@ -376,7 +391,7 @@ class Pug(commands.Cog):
             allowed_mentions=discord.AllowedMentions(users=False))
 
         await player.send(
-            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has removed you from the queue. :door:\n"
+            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has removed you from the queue. :leaves:\n"
             f"> <#{interaction.channel_id}>\n\n")
 
         asyncio.create_task(update_queue(interaction.client, interaction.channel_id))
