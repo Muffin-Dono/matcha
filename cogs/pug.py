@@ -104,7 +104,7 @@ async def refresh_panel(bot: commands.Bot, channel_id: int):
         return
 
     # Create necessary variables for refreshing panels
-    channel = bot.get_channel(channel_id)
+    channel = await bot.fetch_channel(channel_id)
     panel = build_main_panel_embed(channel_id)
     main_buttons = MainButtons()
 
@@ -142,7 +142,7 @@ async def change_nickname(bot: commands.Bot, channel_id: int):
 
     channel = await bot.fetch_channel(channel_id)
     guild = channel.guild
-    me = guild.me
+    me = await guild.fetch_member(bot.user.id)
 
     if players > 0:
         nickname = f"{bot.user.name} ({players} in queue)"
@@ -343,8 +343,8 @@ class Pug(commands.Cog):
         # Store the message ID in dict
         panel_messages[interaction.channel_id].append(panel_message.id)
 
-        # Only store up to 5 messages
-        panel_messages[interaction.channel_id] = panel_messages[interaction.channel_id][-5:]
+        # Only store up to 3 messages
+        panel_messages[interaction.channel_id] = panel_messages[interaction.channel_id][-3:]
 
     # Command to join the queue
     @app_commands.command(name="join", description="Join the PUG queue")
@@ -354,6 +354,7 @@ class Pug(commands.Cog):
         added = await queue_add(interaction.client, interaction.user.id, interaction.channel_id)
         if not added:
             await interaction.response.send_message("You are already in the queue.", ephemeral=True)
+            return
         else:
             await interaction.response.send_message(
                 f"{interaction.user.mention} (`@{interaction.user.display_name}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
@@ -369,6 +370,7 @@ class Pug(commands.Cog):
         removed = await queue_remove(interaction.client, interaction.user.id, interaction.channel_id)
         if not removed:
             await interaction.response.send_message("You are not in the queue.", ephemeral=True)
+            return
         else:
             await interaction.response.send_message(
                 f"{interaction.user.mention} (`@{interaction.user.display_name}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
