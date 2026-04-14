@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import importlib
 import logging
 import pkgutil
@@ -24,7 +25,7 @@ sys.path.append(str(BASE_DIR))
 modules_with_dates = []
 
 for _, name, _ in pkgutil.iter_modules([str(TOURNAMENTS_DIR)]):
-    module = importlib.import_module(f"{"tournaments"}.{name}")
+    module = importlib.import_module(f"tournaments.{name}")
 
     # Parse the date string
     full_name = module.INFO['full_name']
@@ -86,7 +87,7 @@ async def clear_timeout(channel_id):
 def get_state(channel_id):
     if channel_id not in state_handler:
         state_handler[channel_id] = {
-            "tournament": {"info": None, "map_pool": None, "team_roles": None, "map_pools": None},
+            "tournament": {"info": None, "maps": None, "teams": None, "map_pools": None},
             "teams": {"team1": None, "team2": None},
             "coin_toss_winner": None,
             "ban_order": None,
@@ -153,6 +154,8 @@ def user_is_on_team(member: discord.Member, team_name, TEAMS):
     if any(role.id == team_role_id for role in member.roles):
         return True
 
+    return False
+
 # Function to build and send the embed with the match details
 async def send_summary_embed(interaction: discord.Interaction, selection_state):
 
@@ -179,12 +182,12 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
 
     # Function for formatting map picks/bans in embed fields
     def format_selections(maps, dash=False):
-        return "\n".join(f"{"- " if dash else ""}{get_base_name(map, MAPS)} `{map}`" for map in maps)
+        return "\n".join(f"{'- ' if dash else ''}{get_base_name(map, MAPS)} `{map}`" for map in maps)
 
     # Add fields to the embed for picks...
     first_map = format_selections(team1_picks) if team1 == second_to_ban else format_selections(team2_picks)
     second_map = format_selections(team2_picks) if team2 == first_to_ban else format_selections(team1_picks)
-    third_map = f"{get_base_name(selection_state["random_map"], MAPS)} `{selection_state["random_map"]}`"
+    third_map = f"{get_base_name(selection_state['random_map'], MAPS)} `{selection_state['random_map']}`"
 
     embed_maps = (
         f"1. {first_map}\n"
@@ -193,7 +196,7 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
         )
 
     if len(map_pools) > 1:
-        pool_info = f" ({MAPS[selection_state["random_map"]]["map_pool"]})"
+        pool_info = f" ({MAPS[selection_state['random_map']]['map_pool']})"
     else:
         pool_info = ""
 
@@ -224,6 +227,7 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
     await interaction.followup.send(embed=embed)
 
     state_handler.pop(interaction.channel_id, None)
+    await clear_timeout(interaction.channel_id)
 
 class Tourney(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -235,11 +239,11 @@ class Tourney(commands.Cog):
         selection_state = get_state(interaction.channel_id)
         TEAMS = selection_state["tournament"]["teams"]
 
-        if selection_state["teams"] and not (has_admin_privileges(interaction.user)
+        if selection_state["teams"]["team1"] and not (has_admin_privileges(interaction.user)
                 or user_is_on_team(interaction.user, selection_state["teams"]["team1"], TEAMS)
                 or user_is_on_team(interaction.user, selection_state["teams"]["team2"], TEAMS)):
             await interaction.response.send_message(
-                f"Only **{selection_state["teams"]["team1"]}**, **{selection_state["teams"]["team2"]}**, or an Organizer can clear this map selection.", ephemeral=True)
+                f"Only **{selection_state['teams']['team1']}**, **{selection_state['teams']['team2']}**, or an Organizer can clear this map selection.", ephemeral=True)
             return
 
         state_handler.pop(interaction.channel_id, None)
@@ -304,7 +308,7 @@ class Tourney(commands.Cog):
         selection_state["ban_order"] = None
         selection_state["bans"] = {"team1": [], "team2": []}
         selection_state["picks"] = {"team1": [], "team2": []}
-        selection_state["remaining_maps"] = MAPS.copy()
+        selection_state["remaining_maps"] = copy.deepcopy(MAPS)
         selection_state["final_map_pool"] = {"team1": None, "team2": None}
         selection_state["random_map"] = None
 
@@ -435,7 +439,7 @@ class Tourney(commands.Cog):
             selection_state["ban_order"] = [team2, team1] if choice == "BAN first, PICK second" else [team1, team2]
 
         await interaction.response.send_message(
-            f"{trim_team_name(selection_state["coin_toss_winner"], TEAMS)} has chosen to {choice.lower()}.\n\n"
+            f"{trim_team_name(selection_state['coin_toss_winner'], TEAMS)} has chosen to {choice.lower()}.\n\n"
             f"**{trim_team_name(selection_state['ban_order'][0], TEAMS)}**, please ban a map using **`/map_ban`**.")
 
         # Restarts the timeout counter when a command is used on time
@@ -501,7 +505,7 @@ class Tourney(commands.Cog):
         # Checks if the correct team has banned first and resets the ban phase if not
         elif (not team1_bans and team2_bans and team1 == first_to_ban) or (team1_bans and not team2_bans and team2 == first_to_ban):
             selection_state["bans"] = {"team1": [], "team2": []}
-            selection_state["remaining_maps"] = MAPS.copy()
+            selection_state["remaining_maps"] = copy.deepcopy(MAPS)
             await interaction.response.send_message(
                 "Illegal selection state detected. Resetting ban phase.\n\n"
                 f"**{trim_team_name(selection_state['ban_order'][0], TEAMS)}**, please ban a map using **`/map_ban`**.")
@@ -685,7 +689,7 @@ class Tourney(commands.Cog):
             else:
                 await interaction.followup.send(
                 "The final map will be randomly selected from one of the following map pools, according to both teams' choice:\n- "
-                f"{"\n- ".join(selection_state['map_pools'])}\n\n"
+                f"{"\n- ".join(selection_state['tournament']['map_pools'])}\n\n"
                 f"**{trim_team_name(team1, TEAMS)}** and **{trim_team_name(team2, TEAMS)}** can finalize the map selection process by using **`/map_final`**.\n\n"
                 "-# To invoke the Wildcard, both teams must agree. Otherwise, the selection will default to the Standard map pool.")
 
@@ -783,6 +787,12 @@ class Tourney(commands.Cog):
             non_choosing_team_key = "team2" if user_is_on_team(interaction.user, team1, TEAMS) else "team1"
             selection_state["final_map_pool"][choosing_team_key] = choice
 
+            if not (selection_state["final_map_pool"]["team1"] and selection_state["final_map_pool"]["team2"]):
+                await interaction.response.send_message(
+                    f"{trim_team_name(selection_state['teams'][choosing_team_key], TEAMS)} wants to play a map from the __{choice}__ map pool.\n\n"
+                    f"Waiting for **{trim_team_name(selection_state['teams'][non_choosing_team_key], TEAMS)}** to submit their preference using **`/map_final`**.")
+                return
+
         if selection_state["final_map_pool"]["team1"] and selection_state["final_map_pool"]["team2"]:
 
             agreed_pool = "Wildcard" if selection_state["final_map_pool"]["team1"] == selection_state["final_map_pool"]["team2"] == "Wildcard" else "Standard"
@@ -801,13 +811,8 @@ class Tourney(commands.Cog):
 
             await send_summary_embed(interaction, selection_state)
 
-        else:
-            await interaction.response.send_message(
-                f"{trim_team_name(selection_state['teams'][choosing_team_key], TEAMS)} wants to play a map from the __{choice}__ map pool.\n\n"
-                f"Waiting for **{trim_team_name(selection_state['teams'][non_choosing_team_key], TEAMS)}** to submit their preference using **`/map_final`**.")
-
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.channel_id, interaction)
+        reset_timeout_counter(interaction.client, interaction.channel_id)
 
     # Show user the choice of maps to pick
     @map_final_command.autocomplete('choice')
