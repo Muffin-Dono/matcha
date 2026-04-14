@@ -86,12 +86,12 @@ async def clear_timeout(channel_id):
 def get_state(channel_id):
     if channel_id not in state_handler:
         state_handler[channel_id] = {
-            "tournament": {"map_pool": None, "team_roles": None, "map_pools": None},
+            "tournament": {"info": None, "map_pool": None, "team_roles": None, "map_pools": None},
             "teams": {"team1": None, "team2": None},
             "coin_toss_winner": None,
             "ban_order": None,
-            "bans": {"team1": None, "team2": None},
-            "picks": {"team1": None, "team2": None},
+            "bans": {"team1": [], "team2": []},
+            "picks": {"team1": [], "team2": []},
             "remaining_maps": {},
             "final_map_pool": {"team1": None, "team2": None},
             "random_map": None
@@ -155,20 +155,20 @@ def user_is_on_team(member: discord.Member, team_name, TEAMS):
 
 # Function to build and send the embed with the match details
 async def send_summary_embed(interaction: discord.Interaction, selection_state):
-    
+
     MAPS = selection_state["tournament"]["maps"]
     map_pools = selection_state["tournament"]["map_pools"]
     TEAMS = selection_state["tournament"]["teams"]
-    
+
     team1 = selection_state["teams"]["team1"]
     team2 = selection_state["teams"]["team2"]
     first_to_ban = selection_state["ban_order"][0]
     second_to_ban = selection_state["ban_order"][1]
 
-    team1_ban = selection_state["bans"]["team1"]
-    team2_ban = selection_state["bans"]["team2"]
-    team1_pick = selection_state["picks"]["team1"]
-    team2_pick = selection_state["picks"]["team2"]
+    team1_bans = selection_state["bans"]["team1"]
+    team2_bans = selection_state["bans"]["team2"]
+    team1_picks = selection_state["picks"]["team1"]
+    team2_picks = selection_state["picks"]["team2"]
 
     # Confirm match details in an embed
     embed = discord.Embed(
@@ -177,9 +177,13 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
         colour=discord.Colour.from_rgb(252, 155, 40)
         )
 
+    # Function for formatting map picks/bans in embed fields
+    def format_selections(maps, dash=False):
+        return "\n".join(f"{"- " if dash else ""}{get_base_name(map, MAPS)} `{map}`" for map in maps)
+
     # Add fields to the embed for picks...
-    first_map = f"{get_base_name(team1_pick, MAPS)} `{team1_pick}`" if team1 == second_to_ban else f"{get_base_name(team2_pick, MAPS)} `{team2_pick}`"
-    second_map = f"{get_base_name(team2_pick, MAPS)} `{team2_pick}`" if team2 == first_to_ban else f"{get_base_name(team1_pick, MAPS)} `{team1_pick}`"
+    first_map = format_selections(team1_picks) if team1 == second_to_ban else format_selections(team2_picks)
+    second_map = format_selections(team2_picks) if team2 == first_to_ban else format_selections(team1_picks)
     third_map = f"{get_base_name(selection_state["random_map"], MAPS)} `{selection_state["random_map"]}`"
 
     embed_maps = (
@@ -189,7 +193,7 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
         )
 
     if len(map_pools) > 1:
-        pool_info = f" ({MAPS['random_map']['map_pool']})"
+        pool_info = f" ({MAPS[selection_state["random_map"]]["map_pool"]})"
     else:
         pool_info = ""
 
@@ -207,8 +211,14 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
     embed.add_field(name="\u00AD", value="\u00AD", inline=False)
 
     # ...and bans
-    embed.add_field(name=f"{trim_team_name(team1, MAPS)} Ban", value=f"{get_base_name(team1_ban, MAPS)} `{team1_ban}`", inline=True)
-    embed.add_field(name=f"{trim_team_name(team2, MAPS)} Ban", value=f"{get_base_name(team2_ban, MAPS)} `{team2_ban}`", inline=True)
+    embed.add_field(
+        name=f"{trim_team_name(team1, TEAMS)} Bans",
+        value=format_selections(team1_bans, dash=True),
+        inline=True)
+    embed.add_field(
+        name=f"{trim_team_name(team2, TEAMS)} Bans",
+        value=format_selections(team2_bans, dash=True),
+        inline=True)
 
     await asyncio.sleep(2)
     await interaction.followup.send(embed=embed)
@@ -288,12 +298,12 @@ class Tourney(commands.Cog):
             return
 
         # Initialize selection state with assigned teams
-        selection_state["tournament"] = {"maps": tournament.MAPS, "teams": tournament.TEAMS, "map_pools": map_pools}
+        selection_state["tournament"] = {"info": tournament.INFO, "maps": tournament.MAPS, "teams": tournament.TEAMS, "map_pools": map_pools}
         selection_state["teams"] = {"team1": resolved_team1, "team2": resolved_team2}
         selection_state["coin_toss_winner"] = None
         selection_state["ban_order"] = None
-        selection_state["bans"] = {"team1": None, "team2": None}
-        selection_state["picks"] = {"team1": None, "team2": None}
+        selection_state["bans"] = {"team1": [], "team2": []}
+        selection_state["picks"] = {"team1": [], "team2": []}
         selection_state["remaining_maps"] = MAPS.copy()
         selection_state["final_map_pool"] = {"team1": None, "team2": None}
         selection_state["random_map"] = None
@@ -479,25 +489,25 @@ class Tourney(commands.Cog):
         first_to_ban = selection_state["ban_order"][0]
         second_to_ban = selection_state["ban_order"][1]
 
-        team1_ban = selection_state["bans"]["team1"]
-        team2_ban = selection_state["bans"]["team2"]
+        team1_bans = selection_state["bans"]["team1"]
+        team2_bans = selection_state["bans"]["team2"]
 
         # Determine the banning team
         banning_team = None
 
-        if not team1_ban and not team2_ban:
+        if not team1_bans and not team2_bans:
             banning_team = first_to_ban
 
         # Checks if the correct team has banned first and resets the ban phase if not
-        elif (not team1_ban and team2_ban and team1 == first_to_ban) or (team1_ban and not team2_ban and team2 == first_to_ban):
-            selection_state["bans"] = {"team1": None, "team2": None}
+        elif (not team1_bans and team2_bans and team1 == first_to_ban) or (team1_bans and not team2_bans and team2 == first_to_ban):
+            selection_state["bans"] = {"team1": [], "team2": []}
             selection_state["remaining_maps"] = MAPS.copy()
             await interaction.response.send_message(
                 "Illegal selection state detected. Resetting ban phase.\n\n"
                 f"**{trim_team_name(selection_state['ban_order'][0], TEAMS)}**, please ban a map using **`/map_ban`**.")
             return
 
-        elif (team1_ban and not team2_ban) or (not team1_ban and team2_ban):
+        elif (team1_bans and not team2_bans) or (not team1_bans and team2_bans):
             banning_team = second_to_ban
 
         if banning_team is None:
@@ -531,7 +541,7 @@ class Tourney(commands.Cog):
                 "Please choose a remaining map from the Standard map pool:\n" + "\n".join([f"- {map}" for map in standard_maps]))
             return
 
-        selection_state["bans"][f"{banning_team_key}"] = banned_map
+        selection_state["bans"][f"{banning_team_key}"].append(banned_map)
         selection_state["remaining_maps"].pop(banned_map)
 
         if not all(selection_state["bans"].values()):
@@ -649,7 +659,7 @@ class Tourney(commands.Cog):
             return
 
         # Once map is validated, it is saved as a map pick and removed from the remaining map pool
-        selection_state["picks"][team_key] = picked_map
+        selection_state["picks"][team_key].append(picked_map)
         selection_state["remaining_maps"].pop(picked_map)
 
         if not all(selection_state["picks"].values()):
@@ -807,7 +817,7 @@ class Tourney(commands.Cog):
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
         selection_state = get_state(interaction.channel_id)
-        
+
 
         options = selection_state["tournament"]["map_pools"]
         return [

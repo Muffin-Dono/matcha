@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # Load environment variables including discord token and server ID(s)
 load_dotenv()
 token = os.getenv("DISCORD_TOKEN")
-server = int(os.getenv("DISCORD_GUILD"))
+server = int(os.getenv("DISCORD_GUILD", 0))
 
 # Log errors/debug info
 try:
