@@ -10,7 +10,7 @@ INFO = {
 }
 
 # List of available maps with base names, aliases, and map pool types
-MAP_POOL = {
+MAPS = {
     "nt_envoy_ctg": {
         "base_name": ["Envoy"],
         "aliases": [],
@@ -54,7 +54,7 @@ MAP_POOL = {
 }
 
 # List of team Discord roles with role IDs, clan tags, and team names
-TEAM_ROLES = {
+TEAMS = {
     "[BONK] Bonkurazu": {
         "id": 915003320081473576,
         "tag": "BONK",

@@ -198,7 +198,7 @@ class MoreButtons(discord.ui.View):
             await interaction.response.send_message("Queue is empty.", ephemeral=True)
             return
 
-        if interaction.user.id not in queue['players']:
+        if not any(role.permissions.administrator for role in interaction.user.roles) and interaction.user.id not in queue['players']:
             await interaction.response.send_message("Only queued players may :bell: **Ping Queue**.", ephemeral=True)
             return
 

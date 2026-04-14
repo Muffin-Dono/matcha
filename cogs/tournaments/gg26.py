@@ -10,7 +10,7 @@ INFO = {
 }
 
 # List of available maps with base names, aliases, and map pool types
-MAP_POOL = {
+MAPS = {
     "ntre_ballistremade_ctg_a26ff": {
         "base_name": ["Ballistremade"],
         "aliases": ["Ballistrade", "Balli"],
@@ -49,7 +49,7 @@ MAP_POOL = {
 }
 
 # List of team Discord roles with role IDs, clan tags, and team names
-TEAM_ROLES = {
+TEAMS = {
     "[ATEAM] Accessibility Team": {
         "id": 1476525500385071105,
         "tag": "ATEAM",

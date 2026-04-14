@@ -22,7 +22,7 @@ class Help(commands.Cog):
 
         pug_embed_field = (
             "**Useful Commands**\n"
-            "- **`/pug`** - Opens the panel for the PUG queue.\n"
+            "- **`/pug`** - Open the PUG panel (options menu for queue).\n"
             "- **`/join`** - Join the PUG queue.\n"
             "- **`/leave`** - Leave the PUG queue.\n"
             "- **`/remove`** - Remove a player from the PUG queue.\n\n"
