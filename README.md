@@ -60,9 +60,10 @@ Players can currently:
 - **`/map_ban`** Select a map to ban from the remaining <ins>Standard</ins> map pool.
 - **`/map_pick`** Select a map to pick from the remaining <ins>Standard</ins> map pool or **INVOKE WILDCARD**. Invoking the wildcard will randomly select a map from the remaining <ins>Wildcard</ins> map pool.
 - **`/map_final`** Select either "Standard" or "Wildcard" to randomly select the final map from either of these map pools.
+- **`/schedule`** Schedule the match as a Discord event. Organizers and above only.
 
 ### PUG Commands
-- **`/pug`** Opens the panel for the PUG queue.
+- **`/pug`** Opens the PUG Panel.
 - **`/join`** Join the PUG queue.
 - **`/leave`** Leave the PUG queue.
 - **`/remove`** Remove a player from the PUG queue.
@@ -101,5 +102,6 @@ To host the **Matcha** bot yourself, follow these steps:
 ## Future Developments
 - [x] Skip redundant commands for single-map-pool tournaments
 - [x] Add support for queueing pick-up games
+- [x] Add support for scheduling events
 - [ ] Make bot format-agnostic and allow support for more types of tournaments (or even different games)
 - [ ] Add views (buttons, dropdowns) to map selection

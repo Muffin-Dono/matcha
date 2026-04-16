@@ -1,7 +1,9 @@
 # Tournament settings
 INFO = {
     "full_name": "Summer Skirmish 2025",
+    "short_name": "SS25",
     "start_date": "2025-07-21",
+    "stream_url": "https://www.twitch.tv/activeneotokyoplayers",
     "equal_bans": True, # equal number of map bans per team
     "maps_per_match": 3, # number of maps in a single match
     "max_bans": 1, # maximum number of maps banned per team
