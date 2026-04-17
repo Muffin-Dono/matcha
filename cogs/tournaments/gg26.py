@@ -4,6 +4,8 @@ INFO = {
     "short_name": "GG26",
     "start_date": "2026-03-16",
     "stream_url": "https://www.twitch.tv/activeneotokyoplayers",
+    "bracket_url": "https://neotokyo.challonge.com/ghostgauntlet2026",
+    "vods_url": "https://www.youtube.com/@ActiveNeotokyo",
     "equal_bans": True, # equal number of map bans per team
     "maps_per_match": 3, # number of maps in a single match
     "max_bans": 1, # maximum number of maps banned per team

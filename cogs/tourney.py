@@ -227,51 +227,72 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
     await asyncio.sleep(2)
     await interaction.followup.send(embed=embed)
 
+async def schedule_match(interaction: discord.Interaction, selection_state, text):
+    INFO = selection_state["tournament"]["info"]
+
+    tourney = INFO["short_name"]
+    team1 = selection_state["teams"]["team1"]
+    team2 = selection_state["teams"]["team2"]
+    start = selection_state["scheduled_event"]["start"]
+    duration = selection_state["scheduled_event"]["duration"]
+
+    ent_type = discord.EntityType.external
+    priv_level = discord.PrivacyLevel.guild_only
+
+    scheduled_match = await interaction.guild.create_scheduled_event(
+        entity_type=ent_type,
+        privacy_level=priv_level,
+        location=INFO["stream_url"],
+        name=f"{tourney}: {team1} vs {team2}",
+        start_time=start,
+        end_time=start + timedelta(minutes=duration),
+        description=text)
+    
+    team1_role = discord.utils.get(interaction.guild.roles, name=team1)
+    team2_role = discord.utils.get(interaction.guild.roles, name=team2)
+    
+    start_ts = start.timestamp()
+    
+    await interaction.response.send_message(f"**Matcha has scheduled a match** - <t:{int(start_ts)}:R>!\n"
+                                            f"{team1_role.mention} vs {team2_role.mention}\n\n"
+                                            f"{scheduled_match.url}",
+                                            )
+
 class EventDescription(discord.ui.Modal):
-    def __init__(self):
+    def __init__(self, channel_id):
         super().__init__(title="Scheduling an event for a match")
 
-    default_description = (
-        "### ROUND x\n"
-        "[dramatic description here]\n\n"
-        "Bracket: [link to bracket]\n"
-        "YouTube: [link to YouTube]"
-    )
+        selection_state = get_state(channel_id)
+
+        bracket_url = selection_state["tournament"]["info"]["bracket_url"]
+        vods_url = selection_state["tournament"]["info"]["vods_url"]
+
+        default_description = (
+            "## __STAGE - GROUP__ [if applicable]\n"
+            "### ROUND x\n"
+            "[additional text here]\n\n"
+            f"Bracket: {bracket_url}\n"
+            f"VODs: {vods_url}"
+        )
     
-    event_description = discord.ui.Label(
-        text="Write a description for your event",
-        component=discord.ui.TextInput(style=discord.TextStyle.long, default=default_description)
-    )
+        self.add_description = discord.ui.Label(
+            text="Write a description for your event",
+            component=discord.ui.TextInput(style=discord.TextStyle.long, default=default_description)
+        )
+
+        self.add_item(self.add_description)
     
     async def on_submit(self, interaction: discord.Interaction):
         selection_state = get_state(interaction.channel_id)
 
-        INFO = selection_state["tournament"]["info"]
-
-        tourney = INFO["short_name"]
-        team1 = selection_state["teams"]["team1"]
-        team2 = selection_state["teams"]["team2"]
-        start = selection_state["scheduled_event"]["start"]
-        duration = selection_state["scheduled_event"]["duration"]
-
-        ent_type = discord.EntityType.external
-        priv_level = discord.PrivacyLevel.guild_only
-
-        scheduled_match = await interaction.guild.create_scheduled_event(
-            entity_type=ent_type,
-            privacy_level=priv_level,
-            location=INFO["stream_url"],
-            name=f"{tourney}: {team1} vs {team2}",
-            start_time=start,
-            end_time=start + timedelta(minutes=duration),
-            description=self.event_description.component.value)
+        await schedule_match(interaction, selection_state, self.add_description.component.value)
         
-        await interaction.response.send_message(f"**{interaction.user.mention} has scheduled your match!**\n\n"
-                                                f"{scheduled_match.url}",
-                                                allowed_mentions=discord.AllowedMentions(users=False))
-        
-        state_handler.pop(interaction.channel_id, None)
-        await clear_timeout(interaction.channel_id)
+        if selection_state["random_map"]:
+                state_handler.pop(interaction.channel_id, None)
+                await clear_timeout(interaction.channel_id)
+        else:
+            # Restarts the timeout counter when a command is used on time
+            reset_timeout_counter(interaction.client, interaction.channel_id)
 
 class Tourney(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -284,9 +305,12 @@ class Tourney(commands.Cog):
 
         TEAMS = selection_state["tournament"]["teams"]
 
-        if selection_state["teams"]["team1"] and not (user_can_override(interaction.user)
-                or user_is_on_team(interaction.user, selection_state["teams"]["team1"], TEAMS)
-                or user_is_on_team(interaction.user, selection_state["teams"]["team2"], TEAMS)):
+        team1 = selection_state["teams"]["team1"]
+        team2 = selection_state["teams"]["team2"]
+
+        if team1 and team2 and not (user_can_override(interaction.user)
+                or user_is_on_team(interaction.user, team1, TEAMS)
+                or user_is_on_team(interaction.user, team2, TEAMS)):
             await interaction.response.send_message(
                 f"Only **{selection_state['teams']['team1']}**, **{selection_state['teams']['team2']}**, or an Organizer can clear this map selection.", ephemeral=True)
             return
@@ -534,7 +558,7 @@ class Tourney(commands.Cog):
         team2 = selection_state["teams"]["team2"]
 
         # If teams are not set, let user know how to start map selection
-        if not selection_state["teams"]["team1"]:
+        if not team1 and not team2:
             await interaction.response.send_message(
                 "Please use `/match` first to start map selection.",
                 ephemeral=True
@@ -664,7 +688,7 @@ class Tourney(commands.Cog):
         team2 = selection_state["teams"]["team2"]
 
         # If teams are not set, let user know how to start map selection
-        if not selection_state["teams"]["team1"]:
+        if not team1 and not team2:
             await interaction.response.send_message(
                 "Please use `/match` first to start map selection.",
                 ephemeral=True
@@ -752,6 +776,13 @@ class Tourney(commands.Cog):
 
                 await send_summary_embed(interaction, selection_state)
 
+                if selection_state["scheduled_event"]["start"] and selection_state["scheduled_event"]["duration"]:
+                    state_handler.pop(interaction.channel_id, None)
+                    await clear_timeout(interaction.channel_id)
+                else:
+                    # Restarts the timeout counter when a command is used on time
+                    reset_timeout_counter(interaction.client, interaction.channel_id)
+
             else:
                 await interaction.followup.send(
                 "The final map will be randomly selected from one of the following map pools, according to both teams' choice:\n- "
@@ -805,7 +836,7 @@ class Tourney(commands.Cog):
         team2 = selection_state["teams"]["team2"]
 
         # If teams are not set, let user know how to start map selection
-        if not selection_state["teams"]["team1"]:
+        if not team1 and not team2:
             await interaction.response.send_message(
                 "Please use `/match` first to start map selection.",
                 ephemeral=True
@@ -885,8 +916,12 @@ class Tourney(commands.Cog):
 
             await send_summary_embed(interaction, selection_state)
 
-        # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.client, interaction.channel_id)
+        if selection_state["scheduled_event"]["start"] and selection_state["scheduled_event"]["duration"]:
+                state_handler.pop(interaction.channel_id, None)
+                await clear_timeout(interaction.channel_id)
+        else:
+            # Restarts the timeout counter when a command is used on time
+            reset_timeout_counter(interaction.client, interaction.channel_id)
 
     # Show user the choice of maps to pick
     @map_final_command.autocomplete('choice')
@@ -923,34 +958,15 @@ class Tourney(commands.Cog):
     async def schedule_command(self, interaction: discord.Interaction, start: app_commands.Timestamp, description: str = "Yes", duration: int = 120):
         selection_state = get_state(interaction.channel_id)
 
-        INFO = selection_state["tournament"]["info"]
-        MAP_POOLS = selection_state["tournament"]["map_pools"]
-
-        tourney = INFO["short_name"]
         team1 = selection_state["teams"]["team1"]
         team2 = selection_state["teams"]["team2"]
 
         # If teams are not set, let user know how to start map selection
-        if not selection_state["teams"]["team1"]:
+        if not team1 and not team2:
             await interaction.response.send_message(
                 "Please use `/match` first to start map selection.",
                 ephemeral=True
             )
-            return
-        
-        if not all(selection_state["bans"].values()):
-            await interaction.response.send_message(
-                "Teams must complete the banning phase first.", ephemeral=True)
-            return
-
-        if not all(selection_state["picks"].values()):
-            await interaction.response.send_message(
-                "Teams must complete the picking phase first.", ephemeral=True)
-            return
-        
-        if len(MAP_POOLS) > 1 and not selection_state["random_map"]:
-            await interaction.response.send_message(
-                "Teams must complete the picking phase first.", ephemeral=True)
             return
         
         if not user_can_override(interaction.user):
@@ -964,34 +980,29 @@ class Tourney(commands.Cog):
             return
         
         if description == "No":
+            bracket_url = selection_state["tournament"]["info"]["bracket_url"]
+            vods_url = selection_state["tournament"]["info"]["vods_url"]
+
             added_text = (
-                "Matcha thinks there should be a description here!\n\n"
-                "I hope everyone enjoys the match regardless!"
+                "Matcha thinks there should be more info here...\n"
+                "For now, good luck and have fun!\n\n"
+                f"Bracket: {bracket_url}\n"
+                f"VODs: {vods_url}"
             )
 
-            ent_type = discord.EntityType.external
-            priv_level = discord.PrivacyLevel.guild_only
+            await schedule_match(interaction, selection_state, added_text)
             
-            scheduled_match = await interaction.guild.create_scheduled_event(
-                entity_type=ent_type,
-                privacy_level=priv_level,
-                location=INFO["stream_url"],
-                name=f"{tourney}: {team1} vs {team2}",
-                start_time=start,
-                end_time=start + timedelta(minutes=duration),
-                description=added_text)
-            
-            await interaction.response.send_message(f"**{interaction.user.mention} has scheduled your match!**\n\n"
-                                                f"{scheduled_match.url}",
-                                                allowed_mentions=discord.AllowedMentions(users=False))
-            
-            state_handler.pop(interaction.channel_id, None)
-            await clear_timeout(interaction.channel_id)
+            if selection_state["random_map"]:
+                state_handler.pop(interaction.channel_id, None)
+                await clear_timeout(interaction.channel_id)
+            else:
+                # Restarts the timeout counter when a command is used on time
+                reset_timeout_counter(interaction.client, interaction.channel_id)
         else:
             selection_state["scheduled_event"]["start"] = start
             selection_state["scheduled_event"]["duration"] = duration
 
-            event_modal = EventDescription()
+            event_modal = EventDescription(interaction.channel_id)
         
             await interaction.response.send_modal(event_modal)
     

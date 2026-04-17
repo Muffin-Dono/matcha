@@ -60,7 +60,7 @@ Players can currently:
 - **`/map_ban`** Select a map to ban from the remaining <ins>Standard</ins> map pool.
 - **`/map_pick`** Select a map to pick from the remaining <ins>Standard</ins> map pool or **INVOKE WILDCARD**. Invoking the wildcard will randomly select a map from the remaining <ins>Wildcard</ins> map pool.
 - **`/map_final`** Select either "Standard" or "Wildcard" to randomly select the final map from either of these map pools.
-- **`/schedule`** Schedule the match as a Discord event. Organizers and above only.
+- **`/schedule`** Schedule a Discord event on the server for the match. Organizers and above only.
 
 ### PUG Commands
 - **`/pug`** Opens the PUG Panel.
