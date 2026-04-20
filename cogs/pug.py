@@ -33,7 +33,8 @@ async def timeout_clear(bot: commands.Bot, channel_id):
         await update_queue(bot, channel_id)
 
         # Notify channel that queue has been cleared
-        channel = await bot.fetch_channel(channel_id)
+        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+        
         await channel.send(
             f"PUG queue has been cleared of all players due to {int(TIMEOUT_DURATION // (60*60))} hours of inactivity. :pouring_liquid:")
 
