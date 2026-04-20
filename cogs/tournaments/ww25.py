@@ -13,95 +13,95 @@ INFO = {
     "map_pools": ["Standard"] # list of available map pools
 }
 
-# List of available maps with base names, aliases, and map pool types
+# List of available maps with versions, aliases, and map pool types
 MAPS = {
-    "nt_ballistremade_ctg_a16": {
-        "base_name": ["Ballistremade"],
+    "Ballistremade": {
+        "version": "nt_ballistremade_ctg_a16",
         "aliases": ["Ballistrade", "Balli"],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "nt_dew_ctg_b1": {
-        "base_name": ["Dew"],
+    "Dew": {
+        "version": "nt_dew_ctg_b1",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "nt_grid_ctg_b1comp": {
-        "base_name": ["Grid"],
+    "Grid": {
+        "version": "nt_grid_ctg_b1comp",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "nt_saitama_redux_ctg_a5": {
-        "base_name": ["Saitama"],
+    "Saitama": {
+        "version": "nt_saitama_redux_ctg_a5",
         "aliases": ["Tietama"],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "nt_snowfall_ctg_b12": {
-        "base_name": ["Snowfall"],
+    "Snowfall": {
+        "version": "nt_snowfall_ctg_b12",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "nt_tetsu_ctg_b6": {
-        "base_name": ["Tetsu"],
+    "Tetsu": {
+        "version": "nt_tetsu_ctg_b6",
         "aliases": ["Testu"],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "nt_threadplate_ctg": {
-        "base_name": ["Threadplate"],
+    "Threadplate": {
+        "version": "nt_threadplate_ctg",
         "aliases": ["Thread"],
-        "map_pool": "Standard"
-    }
+        "pool": "Standard",
+    },
 }
 
-# List of team Discord roles with role IDs, clan tags, and team names
+# List of teams with role names, clan tags, and role IDs
 TEAMS = {
-    "[ASCI] Anti-Shaving Club I": {
-        "id": 1319293536591413298,
+    "Anti-Shaving Club I": {
+        "role": "[ASCI] Anti-Shaving Club I",
         "tag": "ASCI",
-        "name": "Anti-Shaving Club I",
+        "id": 1319293536591413298
     },
-    "[ASCI] Anti-Shaving Club II": {
-        "id": 1325535639260889209,
+    "Anti-Shaving Club II": {
+        "role": "[ASCI] Anti-Shaving Club II",
         "tag": "ASCII",
-        "name": "Anti-Shaving Club II",
+        "id": 1325535639260889209
     },
-    "[BLVD] Blood and Thunder": {
-        "id": 1325533278513401919,
+    "Blood and Thunder": {
+        "role": "[BLVD] Blood and Thunder",
         "tag": "BLVD",
-        "name": "Blood and Thunder"
+        "id": 1325533278513401919
     },
-    "[BONK] Bonkurazu": {
-        "id": 915003320081473576,
+    "Bonkurazu": {
+        "role": "[BONK] Bonkurazu",
         "tag": "BONK",
-        "name": "Bonkurazu"
+        "id": 915003320081473576
     },
-    "[GB] Ghost Brigade": {
-        "id": 915291950893129788,
+    "Ghost Brigade": {
+        "role": "[GB] Ghost Brigade",
         "tag": "GB",
-        "name": "Ghost Brigade"
+        "id": 915291950893129788
     },
-    "[HOP] Hopgoblins": {
-        "id": 1319364385415630940,
+    "Hopgoblins": {
+        "role": "[HOP] Hopgoblins",
         "tag": "HOP",
-        "name": "Hopgoblins"
+        "id": 1319364385415630940
     },
-    "[Ikko] Ikko Ikki": {
-        "id": 915001460373225502,
+    "Ikko Ikki": {
+        "role": "[Ikko] Ikko Ikki",
         "tag": "Ikko",
-        "name": "Ikko Ikki"
+        "id": 915001460373225502
     },
-    "[KOBA] KOBAYASHI CLAN": {
-        "id": 1135193320155525171,
+    "KOBAYASHI CLAN": {
+        "role": "[KOBA] KOBAYASHI CLAN",
         "tag": "KOBA",
-        "name": "KOBAYASHI CLAN"
+        "id": 1135193320155525171
     },
-    "[MNHR] Menhera": {
-        "id": 1139703753130389514,
+    "Menhera": {
+        "role": "[MNHR] Menhera",
         "tag": "MNHR",
-        "name": "Menhera"
+        "id": 1139703753130389514
     },
-    "[OSHA] Only Some Hammers Allowed": {
-        "id": 1319292531078594592,
+    "Only Some Hammers Allowed": {
+        "role": "[OSHA] Only Some Hammers Allowed",
         "tag": "OSHA",
-        "name": "Only Some Hammers Allowed"
+        "id": 1319292531078594592
     }
 }

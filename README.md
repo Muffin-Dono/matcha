@@ -81,14 +81,15 @@ To host the **Matcha** bot yourself, follow these steps:
    - To add your own tournament, place your tournament file in the `tournaments/` directory. Ensure that your file follows the same format as the existing files in that directory. The bot will automatically load the teams and maps from your newly added file.
 
 3. **Define Your Tournament**:
+   - **`INFO`** - Tournament name, start date, map pools etc.
    - **`MAPS`** - Map names, versions etc.
    - **`TEAMS`** - Team names, clan tags, roles etc.
-   - **`INFO`** - Tournament name, start date, map pools etc.
 
 4. **Manage Permissons**
    - Grant the bot these Discord permissions for full functionality:
      - **View Channels**: Allows it to update embeds with the current number of players in the PUG queue.
-     - **"Manage Nicknames"**: Allows it to change its nickname to display the current number of players in the PUG queue.
+     - **Manage Nicknames**: Allows it to change its nickname to display the current number of players in the PUG queue.
+     - **Create Events**: Allows it to create events on the server for scheduled matches.
 
 5. **Configure Your Commands**
    - You may only want one of the two major functions of this bot. You can restrict usage of the bot's commands to specific channels, roles, and users.
@@ -100,8 +101,8 @@ To host the **Matcha** bot yourself, follow these steps:
 ---
 
 ## Future Developments
-- [x] Skip redundant commands for single-map-pool tournaments
 - [x] Add support for queueing pick-up games
 - [x] Add support for scheduling events
-- [ ] Make bot format-agnostic and allow support for more types of tournaments (or even different games)
 - [ ] Add views (buttons, dropdowns) to map selection
+- [ ] Add data persistence (save data across restarts)
+- [ ] Make bot format-agnostic and allow support for more types of tournaments (or even different games)

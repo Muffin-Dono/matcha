@@ -42,8 +42,7 @@ class Help(commands.Cog):
 
         tourney_embed_field = (
             "- **`/clear`** - Clears the bot and resets the map selection process.\n"
-            "- **`/schedule`** (organizers only) - Schedule a Discord event on the server for a match.\n"
-            "  - Use **`/match`** first to initialize the tournament and opposing teams.\n\n"
+            "- **`/schedule`** (organizers only) - Schedule a Discord event on the server for a match.\n\n"
             "**Selecting Maps for your Match**\n"
             "1. **`/match`** - Begin map selection by inputting two teams and initiate the coin toss.\n"
             "2. **`/order`** - Decide your team's pick and ban order.\n"

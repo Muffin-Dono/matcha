@@ -13,80 +13,80 @@ INFO = {
     "map_pools": ["Standard"] # list of available map pools
 }
 
-# List of available maps with base names, aliases, and map pool types
+# List of available maps with versions, aliases, and map pool types
 MAPS = {
-    "ntre_ballistremade_ctg_a26ff": {
-        "base_name": ["Ballistremade"],
+    "Ballistremade": {
+        "version": "ntre_ballistremade_ctg_a26ff",
         "aliases": ["Ballistrade", "Balli"],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "nt_culvert_ctg_b6": {
-        "base_name": ["Culvert"],
+    "Culvert": {
+        "version": "nt_culvert_ctg_b6",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "ntre_grid_ctg_b2": {
-        "base_name": ["Grid"],
+    "Grid": {
+        "version": "ntre_grid_ctg_b2",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "ntre_oliostain_ctg_b2": {
-        "base_name": ["Oliostain"],
+    "Oliostain": {
+        "version": "ntre_oliostain_ctg_b2",
         "aliases": ["Olio"],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "ntre_rise_ctg": {
-        "base_name": ["Rise"],
+    "Rise": {
+        "version": "ntre_rise_ctg",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "ntre_rogue_ctg": {
-        "base_name": ["Rogue"],
+    "Rogue": {
+        "version": "ntre_rogue_ctg",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "ntre_snowfall_ctg_b13": {
-        "base_name": ["Snowfall"],
+    "Snowfall": {
+        "version": "ntre_snowfall_ctg_b13",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
 }
 
-# List of team Discord roles with role IDs, clan tags, and team names
+# List of teams with role names, clan tags, and role IDs
 TEAMS = {
-    "[ATEAM] Accessibility Team": {
-        "id": 1476525500385071105,
+    "Accessibility Team": {
+        "role": "[ATEAM] Accessibility Team",
         "tag": "ATEAM",
-        "name": "Accessibility Team"
+        "id": 1476525500385071105
     },
-    "[BLVD] Blood and Thunder": {
-        "id": 1325533278513401919,
+    "Blood and Thunder": {
+        "role": "[BLVD] Blood and Thunder",
         "tag": "BLVD",
-        "name": "Blood and Thunder"
+        "id": 1325533278513401919
     },
-    "[BONK] Bonkurazu": {
-        "id": 915003320081473576,
+    "Bonkurazu": {
+        "role": "[BONK] Bonkurazu",
         "tag": "BONK",
-        "name": "Bonkurazu"
+        "id": 915003320081473576
     },
-    "[KOBA] KOBAYASHI CLAN": {
-        "id": 1135193320155525171,
+    "KOBAYASHI CLAN": {
+        "role": "[KOBA] KOBAYASHI CLAN",
         "tag": "KOBA",
-        "name": "KOBAYASHI CLAN"
+        "id": 1135193320155525171
     },
-    "[MTNT] MuteNT Support Cats": {
-        "id": 1476526838640676935,
+    "MuteNT Support Cats": {
+        "role": "[MTNT] MuteNT Support Cats",
         "tag": "MTNT",
-        "name": "MuteNT Support Cats"
+        "id": 1476526838640676935
     },
-    "[FEET] RECON FEET": {
-        "id": 1135193612116824125,
+    "RECON FEET": {
+        "role": "[FEET] RECON FEET",
         "tag": "FEET",
-        "name": "RECON FEET"
+        "id": 1135193612116824125
     },
-    "[PAR] TGR Woods": {
-        "id": 1476526209004208179,
+    "TGR Woods": {
+        "role": "[PAR] TGR Woods",
         "tag": "PAR",
-        "name": "TGR Woods"
+        "id": 1476526209004208179
     }
 }

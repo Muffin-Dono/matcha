@@ -22,19 +22,20 @@ TOURNAMENTS_DIR = BASE_DIR / "tournaments"
 sys.path.append(str(BASE_DIR))
 
 # Import the tournament modules and sort by start date
-modules_with_dates = []
+tournaments = []
 
 for _, name, _ in pkgutil.iter_modules([str(TOURNAMENTS_DIR)]):
-    module = importlib.import_module(f"tournaments.{name}")
+    tournament = importlib.import_module(f"tournaments.{name}")
 
-    # Parse the date string
-    full_name = module.INFO['full_name']
-    start_date_str = module.INFO['start_date']
-    start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
-    map_pools = module.INFO['map_pools']
-    modules_with_dates.append((name, full_name, start_date, map_pools))
+    tournament._start_date = datetime.strptime(
+        tournament.INFO["start_date"], '%Y-%m-%d'
+    )
+    tournament._name = name.lower()
+    tournament._full_name = tournament.INFO["full_name"].lower()
 
-tournaments = sorted(modules_with_dates, key=lambda x: x[2], reverse=True)
+    tournaments.append(tournament)
+
+tournaments.sort(key=lambda t: t._start_date, reverse=True)
 
 # Initialize global state dictionary for map selection
 state_handler = {}
@@ -50,9 +51,10 @@ async def timeout_clear(bot: commands.Bot, channel_id):
 
         await asyncio.sleep(notice_delay)
 
-        channel = await bot.fetch_channel(channel_id)
+        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+
         await channel.send(
-            f"Map selection will be cleared in {TIMEOUT_NOTICE/(60*60)} hour(s) if no further commands are used.")
+            f":warning: Map selection will be cleared in {int(TIMEOUT_NOTICE // (60*60))} hours if there is no further activity.")
 
         await asyncio.sleep(TIMEOUT_NOTICE)
 
@@ -61,7 +63,7 @@ async def timeout_clear(bot: commands.Bot, channel_id):
         timeout_tasks.pop(channel_id, None)
 
         await channel.send(
-            f"Map selection has timed out after {TIMEOUT_DURATION/(60*60)} hours of inactivity and has been cleared.")
+            f"Map selection has timed out after {int(TIMEOUT_DURATION // (60*60))} hours of inactivity and has been cleared. :pouring_liquid:")
 
         guild = channel.guild
         log.info(f"Clearing map selection in {channel}, {guild}...")
@@ -100,25 +102,18 @@ def get_state(channel_id):
         }
     return state_handler[channel_id]
 
-# Function to resolve map name (checks map names and aliases)
+# Function to resolve map name (checks version and aliases)
 def resolve_map_name(map_name, MAPS):
-    for official_name, map_info in MAPS.items():
-        if map_name.lower() == official_name.lower():
-            return official_name
-        for name in map_info['base_name']:
-            if map_name.lower() == name.lower():
-                return official_name
+    for name, map_info in MAPS.items():
+        if map_name.lower() == name.lower():
+            return name
+        for version in map_info['version']:
+            if map_name.lower() == version.lower():
+                return name
         for alias in map_info['aliases']:
             if map_name.lower() == alias.lower():
-                return official_name
+                return name
     return None
-
-# Function to get base name for map
-def get_base_name(map_key, MAPS):
-    base_names = MAPS[map_key]['base_name']
-    if base_names:
-        return f"{base_names[0]}"
-    return "Unknown Map"
 
 # Check if a user has the required perms to override team role restrictions
 def user_can_override(member):
@@ -126,29 +121,38 @@ def user_can_override(member):
         any(role.permissions.administrator for role in member.roles)
         or any(role.name == "Organizer" for role in member.roles))
 
-# Function to resolve team name (returns full team name)
+# Function to resolve input team name and return correct team name
 def resolve_team_name(team_name, TEAMS):
     if team_name == "Mixed Team":
         return "Mixed Team"
-    for full_name, team_info in TEAMS.items():
+    for name, team_info in TEAMS.items():
         if team_name.lower() == team_info["tag"].lower():
-            return full_name
-        if team_name.lower() == full_name.lower() or team_name.lower() == team_info["name"].lower():
-            return full_name
+            return name
+        if team_name.lower() == name.lower() or team_name.lower() == team_info["role"].lower():
+            return name
     return None
 
-# Function to get team name without clan tag
-def trim_team_name(team_name: str, TEAMS) -> str | None:
-    team_info = TEAMS.get(team_name)
-    return team_info["name"] if team_info else None
+# Function to get role name from team name
+def get_team_role(interaction: discord.Interaction, team_name: str, TEAMS) -> str | None:
+    for name, info in TEAMS.items():
+        if name.lower() == team_name.lower():
+            for role in interaction.guild.roles:
+                if role.name.lower() == info["role"].lower():
+                    return role.name
+    return None
+
+def get_team_mention(interaction, team_name, TEAMS):
+    team_role = discord.utils.get(interaction.guild.roles, name=get_team_role(interaction, team_name, TEAMS))
+    return team_role.mention if team_role else team_name
 
 # Function to check if user belongs to a team
-def user_is_on_team(member: discord.Member, team_name, TEAMS):
+def user_is_on_team(interaction: discord.Interaction, member: discord.Member, team_name, TEAMS):
     if team_name in ["Mixed Team", "Mixed Team A", "Mixed Team B"]:
         return True
 
-    team_name_lower = team_name.lower()
-    if any(role.name.lower() == team_name_lower for role in member.roles):
+    team_role = get_team_role(interaction, team_name, TEAMS)
+
+    if any(role.name == team_role for role in member.roles):
         return True
 
     team_role_id = TEAMS[team_name]["id"]
@@ -176,19 +180,19 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
 
     # Confirm match details in an embed
     embed = discord.Embed(
-        title=f"{team1} vs {team2}",
+        title=f"{get_team_role(interaction, team1, TEAMS)} vs {get_team_role(interaction, team2, TEAMS)}",
         description=":white_check_mark: Match is ready to go!",
-        colour=discord.Colour.from_rgb(252, 155, 40)
+        colour=0x6a994e
         )
 
     # Function for formatting map picks/bans in embed fields
     def format_selections(maps, dash=False):
-        return "\n".join(f"{'- ' if dash else ''}{get_base_name(map, MAPS)} `{map}`" for map in maps)
+        return "\n".join(f"{'- ' if dash else ''}{map} `{MAPS[map]['version']}`" for map in maps)
 
     # Add fields to the embed for picks...
     first_map = format_selections(team1_picks) if team1 == second_to_ban else format_selections(team2_picks)
     second_map = format_selections(team2_picks) if team2 == first_to_ban else format_selections(team1_picks)
-    third_map = f"{get_base_name(selection_state['random_map'], MAPS)} `{selection_state['random_map']}`"
+    third_map = f"{selection_state['random_map']} `{MAPS[selection_state['random_map']]['version']}`"
 
     embed_maps = (
         f"1. {first_map}\n"
@@ -197,13 +201,13 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
         )
 
     if len(MAP_POOLS) > 1:
-        pool_info = f" ({MAPS[selection_state['random_map']]['map_pool']})"
+        pool_info = f" ({MAPS[selection_state['random_map']]['pool']})"
     else:
         pool_info = ""
 
     embed_teams = (
-        f"1. {trim_team_name(second_to_ban, TEAMS)}\n"
-        f"2. {trim_team_name(first_to_ban, TEAMS)}\n"
+        f"1. {second_to_ban}\n"
+        f"2. {first_to_ban}\n"
         f"3. *Random*{pool_info}"
         )
 
@@ -216,11 +220,11 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
 
     # ...and bans
     embed.add_field(
-        name=f"{trim_team_name(team1, TEAMS)} Bans",
+        name=f"{team1} Bans",
         value=format_selections(team1_bans, dash=True),
         inline=True)
     embed.add_field(
-        name=f"{trim_team_name(team2, TEAMS)} Bans",
+        name=f"{team2} Bans",
         value=format_selections(team2_bans, dash=True),
         inline=True)
 
@@ -229,6 +233,7 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
 
 async def schedule_match(interaction: discord.Interaction, selection_state, text):
     INFO = selection_state["tournament"]["info"]
+    TEAMS = selection_state["tournament"]["teams"]
 
     tourney = INFO["short_name"]
     team1 = selection_state["teams"]["team1"]
@@ -248,13 +253,16 @@ async def schedule_match(interaction: discord.Interaction, selection_state, text
         end_time=start + timedelta(minutes=duration),
         description=text)
     
-    team1_role = discord.utils.get(interaction.guild.roles, name=team1)
-    team2_role = discord.utils.get(interaction.guild.roles, name=team2)
-    
     start_ts = start.timestamp()
+
+    team1_role = discord.utils.get(interaction.guild.roles, name=get_team_role(interaction, team1, TEAMS))
+    team2_role = discord.utils.get(interaction.guild.roles, name=get_team_role(interaction, team2, TEAMS))
+
+    team1_mention = team1_role.mention if team1_role else team1
+    team2_mention = team2_role.mention if team2_role else team2
     
-    await interaction.response.send_message(f"**Matcha has scheduled a match** - <t:{int(start_ts)}:R>!\n"
-                                            f"{team1_role.mention} vs {team2_role.mention}\n\n"
+    await interaction.response.send_message(f"## {team1_mention} vs {team2_mention}\n"
+                                            f"**Matcha has scheduled a match** - <t:{int(start_ts)}:R>!\n\n"
                                             f"{scheduled_match.url}",
                                             )
 
@@ -309,10 +317,10 @@ class Tourney(commands.Cog):
         team2 = selection_state["teams"]["team2"]
 
         if team1 and team2 and not (user_can_override(interaction.user)
-                or user_is_on_team(interaction.user, team1, TEAMS)
-                or user_is_on_team(interaction.user, team2, TEAMS)):
+                or user_is_on_team(interaction, interaction.user, team1, TEAMS)
+                or user_is_on_team(interaction, interaction.user, team2, TEAMS)):
             await interaction.response.send_message(
-                f"Only **{selection_state['teams']['team1']}**, **{selection_state['teams']['team2']}**, or an Organizer can clear this map selection.", ephemeral=True)
+                f"Only **{team1}**, **{team2}**, or an Organizer can clear this map selection.", ephemeral=True)
             return
 
         state_handler.pop(interaction.channel_id, None)
@@ -324,41 +332,41 @@ class Tourney(commands.Cog):
     @app_commands.command(name="match", description="Set the tournament and opposing teams for a match")
     @discord.app_commands.describe(pool="Name of map pool you want to select from", team1="Name of team 1", team2="Name of team 2")
     async def match_command(self, interaction: discord.Interaction, pool: str, team1: str, team2: str):
+        # Check if map selection is already active in this channel
+        if interaction.channel_id in state_handler:
+            await interaction.response.send_message(
+                "A map selection is already active here! Use **`/clear`** if you need to restart.", ephemeral=True)
+            return
+        
         selection_state = get_state(interaction.channel_id)
 
         # Dynamically import dictionary of map pool based on user input
-        try:
-            for name, full_name, _, map_pools in tournaments:
-                if pool.lower() == name.lower() or pool.lower() == full_name.lower():
-                    module_name = name
-                    break
-
-            tournament = importlib.import_module(f"tournaments.{module_name}")
-
-            MAPS = tournament.MAPS
-            TEAMS = tournament.TEAMS
-
-        except ImportError:
+        tournament = next(
+            (tournament for tournament in tournaments
+            if pool.lower() in (tournament._name, tournament._full_name)),
+            None)
+        
+        if not tournament:
             await interaction.response.send_message(
-                f"ImportError: Could not import the map pool: {pool}.", ephemeral=True)
+                f"Could not find tournament: {pool}.", ephemeral=True)
             return
 
-        except AttributeError:
-            await interaction.response.send_message(
-                "AttributeError: Does not contain a valid map pool.", ephemeral=True)
-            return
+        INFO = tournament.INFO
+        MAPS = tournament.MAPS
+        TEAMS = tournament.TEAMS
 
         resolved_team1 = resolve_team_name(team1, TEAMS)
         resolved_team2 = resolve_team_name(team2, TEAMS)
 
-        # If user is not an organizer they should be in one of the opposing teams
-        if not user_can_override(interaction.user):
-            if not (user_is_on_team(interaction.user, resolved_team1, TEAMS)
-                    or user_is_on_team(interaction.user, resolved_team2, TEAMS)
-                    or "Mixed Team" in {resolved_team1, resolved_team2}):
-                await interaction.response.send_message(
-                    "You must belong to one of the selected teams. Otherwise, pick \"Mixed Team\".", ephemeral=True)
-                return
+        # Check if a user is in one of the opposing teams
+        if not user_can_override(interaction.user) and not (
+            user_is_on_team(interaction, interaction.user, resolved_team1, TEAMS)
+            or user_is_on_team(interaction, interaction.user, resolved_team2, TEAMS)
+            or "Mixed Team" in {resolved_team1, resolved_team2}
+        ):
+            await interaction.response.send_message(
+                'You must belong to one of the selected teams. Otherwise, pick "Mixed Team".', ephemeral=True)
+            return
 
         if not resolved_team1 or not resolved_team2:
             await interaction.response.send_message(
@@ -371,7 +379,7 @@ class Tourney(commands.Cog):
             return
 
         # Initialize selection state with assigned teams
-        selection_state["tournament"] = {"info": tournament.INFO, "maps": tournament.MAPS, "teams": tournament.TEAMS, "map_pools": map_pools}
+        selection_state["tournament"] = {"info": INFO, "maps": MAPS, "teams": TEAMS, "map_pools": INFO["map_pools"]}
         selection_state["teams"] = {"team1": resolved_team1, "team2": resolved_team2}
         selection_state["coin_toss_winner"] = None
         selection_state["ban_order"] = None
@@ -385,31 +393,36 @@ class Tourney(commands.Cog):
         # Announce coin toss winner
         selection_state["coin_toss_winner"] = random.choice([resolved_team1, resolved_team2])
 
-        if resolved_team1 == resolved_team2:
-            coin_toss_winner = selection_state["coin_toss_winner"]
-        else:
-            coin_toss_winner = trim_team_name(selection_state['coin_toss_winner'], TEAMS)
+        coin_toss_winner = selection_state["coin_toss_winner"]
+
+        team1_mention = get_team_mention(interaction, resolved_team1, TEAMS)
+        team2_mention = get_team_mention(interaction, resolved_team2, TEAMS)
+        coin_toss_winner_mention = get_team_mention(interaction, coin_toss_winner, TEAMS)
 
         await interaction.response.send_message(
-            f"**{resolved_team1}** vs **{resolved_team2}**\n\n"
-            f"Map selection started! The tournament is **{pool}**.\n\n"
-            "Performing a coin toss to determine which team decides the ban order...")
+            f"## {team1_mention} vs {team2_mention}\n"
+            f":map: Map selection started! The tournament is **{pool}**.\n\n"
+            "Tossing a coin to see which team will set the ban/pick order... :game_die:",
+            allowed_mentions=discord.AllowedMentions(roles=False))
+        
+        coin_toss_emoji = random.choice([":coin:", ":older_man:", ":church:"])
 
         await asyncio.sleep(2)
         await interaction.followup.send(
-            f"{random.choice([":coin:", ":older_man:", ":church:"])} **{coin_toss_winner}** wins the coin toss! Pick your team's ban/pick order using **`/order`**")
+            f"{coin_toss_emoji} **{coin_toss_winner_mention}** wins the coin toss!\n\n"
+            ":exclamation: Choose whether your team bans first or second using **`/order`**.\n",
+            allowed_mentions=discord.AllowedMentions(roles=False))
 
-        server_role_ids = {role.id for role in interaction.guild.roles}
         server_role_names_lower = {role.name.lower() for role in interaction.guild.roles}
 
         missing_roles = [
-            name for name, info in TEAMS.items()
-            if info["id"] not in server_role_ids and name.lower() not in server_role_names_lower
+            info["role"] for name, info in TEAMS.items()
+            if info["role"].lower() not in server_role_names_lower
         ]
 
         if missing_roles:
             await interaction.followup.send(
-                "**WARNING: The following team roles are missing from your server:**\n- "
+                ":warning: **WARNING: The following team roles are missing from your server:**\n- "
                 + "\n- ".join(missing_roles))
 
         # Restarts the timeout counter when a command is used on time
@@ -423,10 +436,11 @@ class Tourney(commands.Cog):
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
 
-        options = [full_name for _, full_name, _, _ in tournaments][:2]
+        options = [tournament.INFO["full_name"] for tournament in tournaments][:2]
+
         return [
             discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
+            for opt in options if current.lower() in opt.lower()
         ]
 
     # Show user choice of teams
@@ -436,16 +450,21 @@ class Tourney(commands.Cog):
         interaction: discord.Interaction,
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
-
         pool_name = interaction.namespace.pool.lower()
-        module_name = next(name for name, full_name, _, _ in tournaments if pool_name == full_name.lower())
-        tournament = importlib.import_module(f"tournaments.{module_name}")
-        TEAMS = tournament.TEAMS
+        
+        tournament = next(
+            (tournament for tournament in tournaments if tournament._full_name == pool_name),
+            None
+        )
 
-        options = list(TEAMS.keys()) + ["Mixed Team"]
+        if not tournament:
+            return []
+
+        options = list(tournament.TEAMS.keys()) + ["Mixed Team"]
+
         return [
             discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
+            for opt in options if current.lower() in opt.lower()
         ]
 
     @match_command.autocomplete('team2')
@@ -454,16 +473,21 @@ class Tourney(commands.Cog):
         interaction: discord.Interaction,
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
-
         pool_name = interaction.namespace.pool.lower()
-        module_name = next(name for name, full_name, _, _ in tournaments if pool_name == full_name.lower())
-        tournament = importlib.import_module(f"tournaments.{module_name}")
-        TEAMS = tournament.TEAMS
+        
+        tournament = next(
+            (tournament for tournament in tournaments if tournament._full_name == pool_name),
+            None
+        )
 
-        options = list(TEAMS.keys()) + ["Mixed Team"]
+        if not tournament:
+            return []
+
+        options = list(tournament.TEAMS.keys()) + ["Mixed Team"]
+
         return [
             discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
+            for opt in options if current.lower() in opt.lower()
         ]
 
     # Command for the coin toss winner to pick the ban order
@@ -476,8 +500,9 @@ class Tourney(commands.Cog):
 
         team1 = selection_state["teams"]["team1"]
         team2 = selection_state["teams"]["team2"]
+        coin_toss_winner = selection_state["coin_toss_winner"]
 
-        if selection_state["coin_toss_winner"] is None:
+        if coin_toss_winner is None:
             await interaction.response.send_message(
                 "No coin toss winner! Please use **`/match`** first to select teams.", ephemeral=True)
             return
@@ -488,13 +513,13 @@ class Tourney(commands.Cog):
             return
 
         # Check if user is part of the team that won the coin toss
-        if not user_is_on_team(interaction.user, selection_state["coin_toss_winner"], TEAMS) and override == "No":
+        if not user_is_on_team(interaction, interaction.user, coin_toss_winner, TEAMS) and override == "No":
             await interaction.response.send_message(
-                f"Only a member of **{trim_team_name(selection_state['coin_toss_winner'], TEAMS)}** can decide the ban/pick order.",
+                f"Only a member of **{selection_state['coin_toss_winner']}** can decide the ban/pick order.",
                 ephemeral=True)
             return
 
-        if choice not in ["BAN first, PICK second", "BAN second, PICK first"]:
+        if choice not in ["BAN first in banning phase, PICK second in picking phase", "BAN second in banning phase, PICK first in picking phase"]:
             await interaction.response.send_message(
                 "Please choose one of the given options.", ephemeral=True)
             return
@@ -504,14 +529,20 @@ class Tourney(commands.Cog):
                 "Only organizers can override this phase!", ephemeral=True)
             return
 
-        if selection_state["coin_toss_winner"] == team1:
-            selection_state["ban_order"] = [team1, team2] if choice == "BAN first, PICK second" else [team2, team1]
+        if coin_toss_winner == team1:
+            selection_state["ban_order"] = [team1, team2] if choice == "BAN first in banning phase, PICK second in picking phase" else [team2, team1]
         else:
-            selection_state["ban_order"] = [team2, team1] if choice == "BAN first, PICK second" else [team1, team2]
+            selection_state["ban_order"] = [team2, team1] if choice == "BAN first in banning phase, PICK second in picking phase" else [team1, team2]
 
+        coin_toss_winner_mention = get_team_mention(interaction, coin_toss_winner, TEAMS)
+
+        first_to_ban = selection_state["ban_order"][0]
+        first_to_ban_mention = get_team_mention(interaction, first_to_ban, TEAMS)
+        
         await interaction.response.send_message(
-            f"{trim_team_name(selection_state['coin_toss_winner'], TEAMS)} has chosen to {choice.lower()}.\n\n"
-            f"**{trim_team_name(selection_state['ban_order'][0], TEAMS)}**, please ban a map using **`/map_ban`**.")
+            f"{coin_toss_winner_mention} has chosen to {choice.lower()}.\n\n"
+            f":exclamation: **{first_to_ban_mention}**, please ban a map using **`/map_ban`**.",
+            allowed_mentions=discord.AllowedMentions(roles=False))
 
         # Restarts the timeout counter when a command is used on time
         reset_timeout_counter(interaction.client, interaction.channel_id)
@@ -524,7 +555,7 @@ class Tourney(commands.Cog):
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
 
-        options = ["BAN first, PICK second", "BAN second, PICK first"]
+        options = ["BAN first in banning phase, PICK second in picking phase", "BAN second in banning phase, PICK first in picking phase"]
         return [
             discord.app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt
@@ -589,7 +620,7 @@ class Tourney(commands.Cog):
             selection_state["remaining_maps"] = copy.deepcopy(MAPS)
             await interaction.response.send_message(
                 "Illegal selection state detected. Resetting ban phase.\n\n"
-                f"**{trim_team_name(selection_state['ban_order'][0], TEAMS)}**, please ban a map using **`/map_ban`**.")
+                f"**{selection_state['ban_order'][0]}**, please ban a map using **`/map_ban`**.")
             return
 
         elif (team1_bans and not team2_bans) or (not team1_bans and team2_bans):
@@ -599,11 +630,13 @@ class Tourney(commands.Cog):
             await interaction.response.send_message(
                 "You cannot ban any more maps.", ephemeral=True)
             return
+        
+        banning_team_mention = get_team_mention(interaction, banning_team, TEAMS)
 
         # Allow only the current team to ban
-        if not user_is_on_team(interaction.user, banning_team, TEAMS) and override == "No":
+        if not user_is_on_team(interaction, interaction.user, banning_team, TEAMS) and override == "No":
             await interaction.response.send_message(
-                f"Only {trim_team_name(banning_team, TEAMS)} can ban right now.", ephemeral=True)
+                f"Only {banning_team_mention} can ban right now.", ephemeral=True, allowed_mentions=discord.AllowedMentions(roles=False))
             return
 
         if not user_can_override(interaction.user) and override == "Yes":
@@ -615,10 +648,10 @@ class Tourney(commands.Cog):
 
         if len(selection_state["bans"][banning_team_key]) >= INFO["max_bans"]:
             await interaction.response.send_message(
-                f"{trim_team_name(banning_team, TEAMS)} has already banned a map!", ephemeral=True)
+                f"{banning_team_mention} has already banned a map!", ephemeral=True, allowed_mentions=discord.AllowedMentions(roles=False))
             return
 
-        standard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["map_pool"] == "Standard"]
+        standard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Standard"]
         banned_map = resolve_map_name(map, selection_state["remaining_maps"])
 
         if banned_map not in standard_maps:
@@ -631,16 +664,27 @@ class Tourney(commands.Cog):
 
         if not all(selection_state["bans"].values()):
             next_team = second_to_ban if banning_team == first_to_ban else first_to_ban
+            next_team_mention = get_team_mention(interaction, next_team, TEAMS)
+
             await interaction.response.send_message(
-                f"{trim_team_name(banning_team, TEAMS)} has banned: **{banned_map}**\n\n"
-                f"**{trim_team_name(next_team, TEAMS)}**, please ban a map using **`/map_ban`**.")
+                f"{banning_team_mention} has banned: **__{banned_map}__**\n\n"
+                f":exclamation: **{next_team_mention}**, please ban a map using **`/map_ban`**.",
+                allowed_mentions=discord.AllowedMentions(roles=False))
 
         elif all(selection_state["bans"].values()):
             picking_team = second_to_ban
+            picking_team_mention = get_team_mention(interaction, picking_team, TEAMS)
+
             await interaction.response.send_message(
-                f"{trim_team_name(banning_team, TEAMS)} has banned: **{banned_map}**\n\n"
-                ":ballot_box_with_check: Banning phase complete!\n\n"
-                f"**{trim_team_name(picking_team, TEAMS)}**, please pick a map using **`/map_pick`**.")
+                f"{banning_team_mention} has banned: **__{banned_map}__**\n\n"
+                "**Banning phase complete!** :ballot_box_with_check:",
+                allowed_mentions=discord.AllowedMentions(roles=False))
+            
+            await asyncio.sleep(0.5)
+            await interaction.followup.send(
+                f":exclamation: **{picking_team_mention}**, please pick a map using **`/map_pick`**.",
+                allowed_mentions=discord.AllowedMentions(roles=False)
+            )
 
         # Restarts the timeout counter when a command is used on time
         reset_timeout_counter(interaction.client, interaction.channel_id)
@@ -654,7 +698,7 @@ class Tourney(commands.Cog):
     ) -> list[discord.app_commands.Choice[str]]:
         selection_state = get_state(interaction.channel_id)
 
-        options = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["map_pool"] == "Standard"]
+        options = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Standard"]
         return [
             discord.app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt
@@ -708,11 +752,13 @@ class Tourney(commands.Cog):
             picking_team = second_to_ban
         else:
             picking_team = first_to_ban
+        
+        picking_team_mention = get_team_mention(interaction, picking_team, TEAMS)
 
         # Allow only the current team to ban
-        if not user_is_on_team(interaction.user, picking_team, TEAMS) and override == "No":
+        if not user_is_on_team(interaction, interaction.user, picking_team, TEAMS) and override == "No":
             await interaction.response.send_message(
-                f"Only {trim_team_name(picking_team, TEAMS)} can pick a map right now.", ephemeral=True)
+                f"Only {picking_team_mention} can pick a map right now.", ephemeral=True, allowed_mentions=discord.AllowedMentions(roles=False))
             return
 
         if not user_can_override(interaction.user) and override == "Yes":
@@ -724,7 +770,7 @@ class Tourney(commands.Cog):
 
         if "INVOKE WILDCARD" in map:
 
-            wildcard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["map_pool"] == "Wildcard"]
+            wildcard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Wildcard"]
 
             if not wildcard_maps:
                 await interaction.response.send_message(
@@ -737,7 +783,7 @@ class Tourney(commands.Cog):
 
         else:
             picked_map = resolve_map_name(map, selection_state["remaining_maps"])
-            standard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["map_pool"] == "Standard"]
+            standard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Standard"]
             added_text = "picked"
 
             if picked_map not in standard_maps:
@@ -748,8 +794,9 @@ class Tourney(commands.Cog):
         # Prevent a team from picking twice
         if len(selection_state["picks"][team_key]) >= INFO["max_picks"]:
             await interaction.response.send_message(
-                f"{trim_team_name(picking_team, TEAMS)} has already picked a map: **{selection_state['picks'][team_key]}**. You cannot pick again.",
-                ephemeral=True)
+                f"{picking_team_mention} has already picked a map: **__{selection_state['picks'][team_key]}__**. You cannot pick again.",
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions(roles=False))
             return
 
         # Once map is validated, it is saved as a map pick and removed from the remaining map pool
@@ -758,14 +805,18 @@ class Tourney(commands.Cog):
 
         if not all(selection_state["picks"].values()):
             next_team = first_to_ban if picking_team == second_to_ban else second_to_ban
+            next_team_mention = get_team_mention(interaction, next_team, TEAMS)
+
             await interaction.response.send_message(
-                f"{trim_team_name(picking_team, TEAMS)} has {added_text}: **{picked_map}**\n\n"
-                f"**{trim_team_name(next_team, TEAMS)}**, please pick a map using **`/map_pick`**.")
+                f"{picking_team_mention} has {added_text}: **__{picked_map}__**\n\n"
+                f":exclamation: **{next_team_mention}**, please pick a map using **`/map_pick`**.",
+                allowed_mentions=discord.AllowedMentions(roles=False))
 
         if all(selection_state["picks"].values()):
             await interaction.response.send_message(
-                f"{trim_team_name(picking_team, TEAMS)} has {added_text}: **{picked_map}**\n\n"
-                ":ballot_box_with_check: Picking phase complete!\n\n")
+                f"{picking_team_mention} has {added_text}: **__{picked_map}__**\n\n"
+                "**Picking phase complete! :ballot_box_with_check:**\n\n",
+                allowed_mentions=discord.AllowedMentions(roles=False))
             if len(MAP_POOLS) == 1:
                 final_maps = list(selection_state["remaining_maps"].keys())
                 selection_state["random_map"] = random.choice(final_maps)
@@ -784,11 +835,15 @@ class Tourney(commands.Cog):
                     reset_timeout_counter(interaction.client, interaction.channel_id)
 
             else:
+                team1_mention = get_team_mention(interaction, team1, TEAMS)
+                team2_mention = get_team_mention(interaction, team2, TEAMS)
+
                 await interaction.followup.send(
                 "The final map will be randomly selected from one of the following map pools, according to both teams' choice:\n- "
                 f"{"\n- ".join(selection_state['tournament']['map_pools'])}\n\n"
-                f"**{trim_team_name(team1, TEAMS)}** and **{trim_team_name(team2, TEAMS)}** can finalize the map selection process by using **`/map_final`**.\n\n"
-                "-# To invoke the Wildcard, both teams must agree. Otherwise, the selection will default to the Standard map pool.")
+                f":exclamation: **{team1_mention}** and **{team2_mention}** can finalize the map selection process by using **`/map_final`**.\n\n"
+                "-# To invoke the Wildcard, both teams must agree. Otherwise, the selection will default to the Standard map pool.",
+                allowed_mentions=discord.AllowedMentions(roles=False))
 
         # Restarts the timeout counter when a command is used on time
         reset_timeout_counter(interaction.client, interaction.channel_id)
@@ -803,7 +858,7 @@ class Tourney(commands.Cog):
         selection_state = get_state(interaction.channel_id)
         map_pools = selection_state["tournament"]["map_pools"]
 
-        standard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["map_pool"] == "Standard"]
+        standard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Standard"]
         options = standard_maps + (["INVOKE WILDCARD"] if "Wildcard" in map_pools else [])
         return [
             discord.app_commands.Choice(name=opt, value=opt)
@@ -855,8 +910,8 @@ class Tourney(commands.Cog):
 
         # Allow only the opposing teams to use the command
         if not(
-            user_is_on_team(interaction.user, team1, TEAMS) or
-            user_is_on_team(interaction.user, team2, TEAMS)
+            user_is_on_team(interaction, interaction.user, team1, TEAMS) or
+            user_is_on_team(interaction, interaction.user, team2, TEAMS)
         ) and override == "No":
             await interaction.response.send_message(
                 "You must belong to one of the opposing teams.", ephemeral=True)
@@ -876,7 +931,7 @@ class Tourney(commands.Cog):
 
         # Function to check if a map pool has any maps remaining
         def pool_has_maps(pool):
-            return any(maps for maps in selection_state["remaining_maps"].values() if maps["map_pool"] == pool)
+            return any(maps for maps in selection_state["remaining_maps"].values() if maps["pool"] == pool)
 
         # Validate the choice of map pool
         if not pool_has_maps(choice):
@@ -888,14 +943,21 @@ class Tourney(commands.Cog):
             selection_state["final_map_pool"]["team1"] = choice
             selection_state["final_map_pool"]["team2"] = choice
         else:
-            choosing_team_key = "team1" if user_is_on_team(interaction.user, team1, TEAMS) else "team2"
-            non_choosing_team_key = "team2" if user_is_on_team(interaction.user, team1, TEAMS) else "team1"
+            choosing_team_key = "team1" if user_is_on_team(interaction, interaction.user, team1, TEAMS) else "team2"
+            choosing_team = selection_state["teams"][choosing_team_key]
+            choosing_team_mention = get_team_mention(interaction, choosing_team, TEAMS)
+
+            non_choosing_team_key = "team2" if user_is_on_team(interaction, interaction.user, team1, TEAMS) else "team1"
+            non_choosing_team = selection_state["teams"][non_choosing_team_key]
+            non_choosing_team_mention = get_team_mention(interaction, non_choosing_team, TEAMS)
+
             selection_state["final_map_pool"][choosing_team_key] = choice
 
             if not (selection_state["final_map_pool"]["team1"] and selection_state["final_map_pool"]["team2"]):
                 await interaction.response.send_message(
-                    f"{trim_team_name(selection_state['teams'][choosing_team_key], TEAMS)} wants to play a map from the __{choice}__ map pool.\n\n"
-                    f"Waiting for **{trim_team_name(selection_state['teams'][non_choosing_team_key], TEAMS)}** to submit their preference using **`/map_final`**.")
+                    f"{choosing_team_mention} wants to play a map from the __{choice}__ map pool.\n\n"
+                    f":exclamation: Waiting for **{non_choosing_team_mention}** to submit their preference using **`/map_final`**.",
+                    allowed_mentions=discord.AllowedMentions(roles=False))
                 return
 
         if selection_state["final_map_pool"]["team1"] and selection_state["final_map_pool"]["team2"]:
@@ -905,7 +967,7 @@ class Tourney(commands.Cog):
             # Pull the remaining maps in the selected map pool
             final_maps = [
                 map_key for map_key, map_info in selection_state["remaining_maps"].items()
-                if map_info["map_pool"] == agreed_pool
+                if map_info["pool"] == agreed_pool
                 ]
 
             selection_state["random_map"] = random.choice(final_maps)
@@ -932,7 +994,6 @@ class Tourney(commands.Cog):
     ) -> list[discord.app_commands.Choice[str]]:
         selection_state = get_state(interaction.channel_id)
 
-
         options = selection_state["tournament"]["map_pools"]
         return [
             discord.app_commands.Choice(name=opt, value=opt)
@@ -954,8 +1015,8 @@ class Tourney(commands.Cog):
         ]
     
     @app_commands.command(name="schedule", description="Create a Discord event for a match")
-    @discord.app_commands.describe(start="Start time of match (use @time)", description="Add a description for match?", duration="Duration of match in minutes")
-    async def schedule_command(self, interaction: discord.Interaction, start: app_commands.Timestamp, description: str = "Yes", duration: int = 120):
+    @discord.app_commands.describe(start="Start time of match (use @time)", description="Customize the event description or use the tournament's default template", duration="Expected duration of match in minutes")
+    async def schedule_command(self, interaction: discord.Interaction, start: app_commands.Timestamp, description: str = "Custom", duration: int = 120):
         selection_state = get_state(interaction.channel_id)
 
         team1 = selection_state["teams"]["team1"]
@@ -974,18 +1035,19 @@ class Tourney(commands.Cog):
                 "Only organizers can create Discord events.", ephemeral=True)
             return
         
-        if description not in ["Yes","No"]:
-            interaction.response.send_message(
-                "Please select either \"Yes\" or \"No\".", ephemeral=True)
+        if description not in ["Customize","Default"]:
+            await interaction.response.send_message(
+                "Please select either \"Customize\" or \"Default\".", ephemeral=True)
             return
         
-        if description == "No":
+        selection_state["scheduled_event"]["start"] = start
+        selection_state["scheduled_event"]["duration"] = int(duration)
+        
+        if description == "Default":
             bracket_url = selection_state["tournament"]["info"]["bracket_url"]
             vods_url = selection_state["tournament"]["info"]["vods_url"]
 
             added_text = (
-                "Matcha thinks there should be more info here...\n"
-                "For now, good luck and have fun!\n\n"
                 f"Bracket: {bracket_url}\n"
                 f"VODs: {vods_url}"
             )
@@ -999,9 +1061,6 @@ class Tourney(commands.Cog):
                 # Restarts the timeout counter when a command is used on time
                 reset_timeout_counter(interaction.client, interaction.channel_id)
         else:
-            selection_state["scheduled_event"]["start"] = start
-            selection_state["scheduled_event"]["duration"] = duration
-
             event_modal = EventDescription(interaction.channel_id)
         
             await interaction.response.send_modal(event_modal)
@@ -1014,7 +1073,7 @@ class Tourney(commands.Cog):
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
 
-        options = ["Yes","No"]
+        options = ["Customize","Default"]
         return [
             discord.app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt

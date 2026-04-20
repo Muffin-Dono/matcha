@@ -13,85 +13,85 @@ INFO = {
     "map_pools": ["Standard", "Wildcard"] # list of available map pools
 }
 
-# List of available maps with base names, aliases, and map pool types
+# List of available maps with versions, aliases, and map pool types
 MAPS = {
-    "nt_envoy_ctg": {
-        "base_name": ["Envoy"],
+    "Envoy": {
+        "version": "nt_envoy_ctg",
         "aliases": [],
-        "map_pool": "Standard"
+        "pool": "Standard",
     },
-    "nt_oilstain_ctg": {
-        "base_name": ["Oilstain"],
+    "Oilstain": {
+        "version": "nt_oilstain_ctg",
         "aliases": ["Oil"],
-        "map_pool": "Standard",
+        "pool": "Standard",
     },
-    "nt_rogue_ctg_b4": {
-        "base_name": ["Rogue"],
-        "aliases": ["Rouge"],
-        "map_pool": "Standard",
+    "Rogue": {
+        "version": "nt_rogue_ctg_b4",
+        "aliases": [],
+        "pool": "Standard",
     },
-    "nt_scrapmetal_ctg_a7f": {
-        "base_name": ["Scrapmetal"],
+    "Scrapmetal": {
+        "version": "nt_scrapmetal_ctg_a7f",
         "aliases": ["Scrap"],
-        "map_pool": "Standard",
+        "pool": "Standard",
     },
-    "nt_tetsu_ctg_b6f": {
-        "base_name": ["Tetsu"],
+    "Tetsu": {
+        "version": "nt_tetsu_ctg_b6f",
         "aliases": ["Testu"],
-        "map_pool": "Standard",
+        "pool": "Standard",
     },
-    "nt_dawnlife_ctg_b1": {
-        "base_name": ["Dawnlife"],
+    "Dawnlife": {
+        "version": "nt_dawnlife_ctg_b1",
         "aliases": ["Dawn"],
-        "map_pool": "Wildcard",
+        "pool": "Wildcard",
     },
-    "nt_tetsujin_ctg": {
-        "base_name": ["Tetsujin"],
+    "Tetsujin": {
+        "version": "nt_tetsujin_ctg",
         "aliases": ["Jin"],
-        "map_pool": "Wildcard",
+        "pool": "Wildcard",
     },
-    "nt_turmuk_ctg_beta3": {
-        "base_name": ["Turmuk"],
+    "Turmuk": {
+        "version": "nt_turmuk_ctg_beta3",
         "aliases": ["Tarmac"],
-        "map_pool": "Wildcard",
-    }
+        "pool": "Wildcard",
+    },
 }
 
-# List of team Discord roles with role IDs, clan tags, and team names
+# List of teams with role names, clan tags, and role IDs
 TEAMS = {
-    "[BONK] Bonkurazu": {
-        "id": 915003320081473576,
+    "Bonkurazu": {
+        "role": "[BONK] Bonkurazu",
         "tag": "BONK",
-        "name": "Bonkurazu"
+        "id": 915003320081473576
     },
-    "._o< | DuctTales": {
-        "id": 1386762664990212166,
+    "DuctTales": {
+        "role": "._o< | DuctTales",
         "tag": "._o<",
-        "name": "DuctTales",
+        "id": 1386762664990212166
     },
-    "[EQ] Equinox": {
-        "id": 1386760980029112520,
+    "Equinox": {
+        "role": "[EQ] Equinox",
         "tag": "EQ",
-        "name": "Equinox"
+        "id": 1386760980029112520
     },
-    "[KOBA] KOBAYASHI CLAN": {
-        "id": 1135193320155525171,
+    "KOBAYASHI CLAN": {
+        "role": "[KOBA] KOBAYASHI CLAN",
         "tag": "KOBA",
-        "name": "KOBAYASHI CLAN"
+        "id": 1135193320155525171
     },
-    "[SAA] SHOCK AND AWE": {
-        "id": 1386763196496609451,
+    "SHOCK AND AWE": {
+        "role": "[SAA] SHOCK AND AWE",
         "tag": "SAA",
-        "name": "SHOCK AND AWE"
+        "id": 1386763196496609451
     },
-    "=-SLI-= Slightly Less Incompetent": {
-        "id": 1396589635936849920,
+    "Slightly Less Incompetent": {
+        "role": "=-SLI-= Slightly Less Incompetent",
         "tag": "SLI",
-        "name": "Slightly Less Incompetent"
+        "id": 1396589635936849920
     },
-    "[11:59] They Will Eat Earl's Dust": {
-        "id": 1396589916695040093,
+    "They Will Eat Earl's Dust": {
+        "role": "[11:59] They Will Eat Earl's Dust",
         "tag": "11:59",
-        "name": "They Will Eat Earl's Dust"
+        "id": 1396589916695040093
     }
 }
