@@ -85,23 +85,6 @@ async def clear_timeout(channel_id):
         timeout_tasks[channel_id].cancel()
         timeout_tasks.pop(channel_id, None)
 
-# Function to resolve interaction channel (bot must only take inputs from the channel it is being used in)
-def get_state(channel_id):
-    if channel_id not in state_handler:
-        state_handler[channel_id] = {
-            "tournament": {"info": None, "maps": None, "teams": None, "map_pools": None},
-            "teams": {"team1": None, "team2": None},
-            "coin_toss_winner": None,
-            "ban_order": None,
-            "bans": {"team1": [], "team2": []},
-            "picks": {"team1": [], "team2": []},
-            "remaining_maps": {},
-            "final_map_pool": {"team1": None, "team2": None},
-            "random_map": None,
-            "scheduled_event": {"start": None, "duration": None}
-        }
-    return state_handler[channel_id]
-
 # Function to resolve map name (checks version and aliases)
 def resolve_map_name(map_name, MAPS):
     for name, map_info in MAPS.items():
@@ -123,6 +106,8 @@ def user_can_override(member):
 
 # Function to resolve input team name and return correct team name
 def resolve_team_name(team_name, TEAMS):
+    if not team_name:
+        return None
     if team_name == "Mixed Team":
         return "Mixed Team"
     for name, team_info in TEAMS.items():
@@ -270,7 +255,10 @@ class EventDescription(discord.ui.Modal):
     def __init__(self, channel_id):
         super().__init__(title="Scheduling an event for a match")
 
-        selection_state = get_state(channel_id)
+        selection_state = state_handler.get(channel_id)
+
+        if not selection_state:
+            return log.info("State not found (modal)")
 
         bracket_url = selection_state["tournament"]["info"]["bracket_url"]
         vods_url = selection_state["tournament"]["info"]["vods_url"]
@@ -291,7 +279,10 @@ class EventDescription(discord.ui.Modal):
         self.add_item(self.add_description)
     
     async def on_submit(self, interaction: discord.Interaction):
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            return log.info("State not found (on submit)")
 
         await schedule_match(interaction, selection_state, self.add_description.component.value)
         
@@ -309,7 +300,11 @@ class Tourney(commands.Cog):
     # Command to clear the selection state
     @app_commands.command(name="clear", description="Clears the map selection state")
     async def clear_command(self, interaction: discord.Interaction):
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            await interaction.response.send_message("Map selection is already clear.", ephemeral=True)
+            return
 
         TEAMS = selection_state["tournament"]["teams"]
 
@@ -335,10 +330,8 @@ class Tourney(commands.Cog):
         # Check if map selection is already active in this channel
         if interaction.channel_id in state_handler:
             await interaction.response.send_message(
-                "A map selection is already active here! Use **`/clear`** if you need to restart.", ephemeral=True)
+                "A map selection is already active in this channel! Use **`/clear`** to restart.", ephemeral=True)
             return
-        
-        selection_state = get_state(interaction.channel_id)
 
         # Dynamically import dictionary of map pool based on user input
         tournament = next(
@@ -379,16 +372,22 @@ class Tourney(commands.Cog):
             return
 
         # Initialize selection state with assigned teams
-        selection_state["tournament"] = {"info": INFO, "maps": MAPS, "teams": TEAMS, "map_pools": INFO["map_pools"]}
-        selection_state["teams"] = {"team1": resolved_team1, "team2": resolved_team2}
-        selection_state["coin_toss_winner"] = None
-        selection_state["ban_order"] = None
-        selection_state["bans"] = {"team1": [], "team2": []}
-        selection_state["picks"] = {"team1": [], "team2": []}
-        selection_state["remaining_maps"] = copy.deepcopy(MAPS)
-        selection_state["final_map_pool"] = {"team1": None, "team2": None}
-        selection_state["random_map"] = None
-        selection_state["scheduled_event"] = {"start": None, "duration": None}
+        state_handler[interaction.channel_id] = {
+            "tournament": {"info": INFO, "maps": MAPS, "teams": TEAMS, "map_pools": INFO["map_pools"]},
+            "teams": {"team1": resolved_team1, "team2": resolved_team2},
+            "coin_toss_winner": None,
+            "ban_order": None,
+            "bans": {"team1": [], "team2": []},
+            "picks": {"team1": [], "team2": []},
+            "remaining_maps": copy.deepcopy(MAPS),
+            "final_map_pool": {"team1": None, "team2": None},
+            "random_map": None,
+            "scheduled_event": {"start": None, "duration": None}
+            }
+
+        log.info(f"Created state for channel: {interaction.channel_id}")
+
+        selection_state = state_handler[interaction.channel_id]
 
         # Announce coin toss winner
         selection_state["coin_toss_winner"] = random.choice([resolved_team1, resolved_team2])
@@ -494,7 +493,12 @@ class Tourney(commands.Cog):
     @app_commands.command(name='order', description='Choose whether your team bans first or second')
     @discord.app_commands.describe(choice="Ban first and pick second OR ban second and pick first", override="Organizers can override this phase")
     async def order_command(self, interaction: discord.Interaction, choice: str, override: str = "No"):
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            await interaction.response.send_message(
+                "Please use `/match` first to start map selection.", ephemeral=True)
+            return
 
         TEAMS = selection_state["tournament"]["teams"]
 
@@ -579,7 +583,12 @@ class Tourney(commands.Cog):
     @app_commands.command(name='map_ban', description='Ban a map')
     @discord.app_commands.describe(map="Select a map to ban", override="Organizers can override this phase")
     async def map_ban_command(self, interaction: discord.Interaction, map: str, override: str = "No"):
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            await interaction.response.send_message(
+                "Please use `/match` first to start map selection.", ephemeral=True)
+            return
 
         INFO = selection_state["tournament"]["info"]
         MAPS = selection_state["tournament"]["maps"]
@@ -587,14 +596,6 @@ class Tourney(commands.Cog):
 
         team1 = selection_state["teams"]["team1"]
         team2 = selection_state["teams"]["team2"]
-
-        # If teams are not set, let user know how to start map selection
-        if not team1 and not team2:
-            await interaction.response.send_message(
-                "Please use `/match` first to start map selection.",
-                ephemeral=True
-            )
-            return
 
         # Validate the ban order
         if not selection_state["ban_order"]:
@@ -696,7 +697,10 @@ class Tourney(commands.Cog):
         interaction: discord.Interaction,
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            return []
 
         options = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Standard"]
         return [
@@ -722,7 +726,12 @@ class Tourney(commands.Cog):
     @app_commands.command(name="map_pick", description='Pick a map')
     @discord.app_commands.describe(map="Select a map to pick", override="Organizers can override this phase")
     async def map_pick_command(self, interaction: discord.Interaction, map: str, override: str = "No"):
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            await interaction.response.send_message(
+                "Please use `/match` first to start map selection.", ephemeral=True)
+            return
 
         INFO = selection_state["tournament"]["info"]
         MAP_POOLS = selection_state["tournament"]["map_pools"]
@@ -730,14 +739,6 @@ class Tourney(commands.Cog):
 
         team1 = selection_state["teams"]["team1"]
         team2 = selection_state["teams"]["team2"]
-
-        # If teams are not set, let user know how to start map selection
-        if not team1 and not team2:
-            await interaction.response.send_message(
-                "Please use `/match` first to start map selection.",
-                ephemeral=True
-            )
-            return
 
         if not all(selection_state["bans"].values()):
             await interaction.response.send_message(
@@ -855,7 +856,11 @@ class Tourney(commands.Cog):
         interaction: discord.Interaction,
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            return []
+        
         map_pools = selection_state["tournament"]["map_pools"]
 
         standard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Standard"]
@@ -883,20 +888,17 @@ class Tourney(commands.Cog):
     @app_commands.command(name="map_final", description='Choose whether the final map is from the Standard or Wildcard map pool')
     @discord.app_commands.describe(choice="Standard/Wildcard", override="Organizers can override this phase")
     async def map_final_command(self, interaction: discord.Interaction, choice: str, override: str = "No"):
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            await interaction.response.send_message(
+                "Please use `/match` first to start map selection.", ephemeral=True)
+            return
 
         TEAMS = selection_state["tournament"]["teams"]
 
         team1 = selection_state["teams"]["team1"]
         team2 = selection_state["teams"]["team2"]
-
-        # If teams are not set, let user know how to start map selection
-        if not team1 and not team2:
-            await interaction.response.send_message(
-                "Please use `/match` first to start map selection.",
-                ephemeral=True
-            )
-            return
         
         if not all(selection_state["bans"].values()):
             await interaction.response.send_message(
@@ -992,7 +994,10 @@ class Tourney(commands.Cog):
         interaction: discord.Interaction,
         current: str,
     ) -> list[discord.app_commands.Choice[str]]:
-        selection_state = get_state(interaction.channel_id)
+        selection_state = state_handler.get(interaction.channel_id)
+
+        if not selection_state:
+            return []
 
         options = selection_state["tournament"]["map_pools"]
         return [
@@ -1015,19 +1020,13 @@ class Tourney(commands.Cog):
         ]
     
     @app_commands.command(name="schedule", description="Create a Discord event for a match")
-    @discord.app_commands.describe(start="Start time of match (use @time)", description="Customize the event description or use the tournament's default template", duration="Expected duration of match in minutes")
-    async def schedule_command(self, interaction: discord.Interaction, start: app_commands.Timestamp, description: str = "Custom", duration: int = 120):
-        selection_state = get_state(interaction.channel_id)
+    @discord.app_commands.describe(start="Start time of match (use @time)", description="Customize the event description or use the tournament's default template", duration="Expected duration of the event in minutes")
+    async def schedule_command(self, interaction: discord.Interaction, start: app_commands.Timestamp, description: str = "Customize", duration: int = 120):
+        selection_state = state_handler.get(interaction.channel_id)
 
-        team1 = selection_state["teams"]["team1"]
-        team2 = selection_state["teams"]["team2"]
-
-        # If teams are not set, let user know how to start map selection
-        if not team1 and not team2:
+        if not selection_state:
             await interaction.response.send_message(
-                "Please use `/match` first to start map selection.",
-                ephemeral=True
-            )
+                "Teams have not been set. Please use `/match` first to start map selection.", ephemeral=True)
             return
         
         if not user_can_override(interaction.user):
