@@ -48,10 +48,6 @@ Players can currently:
 
 ## Useful Commands
 
-### Help
-- **`/help pug`** Help options for PUG queue
-- **`/help tourney`** Help options for tournament map selection
-
 ### Tournament Commands
 - **`/clear`** Clears the bot and resets the map selection process.
 - **`/match`** Begin map selection by inputting two teams and initiating a coin toss.
@@ -68,7 +64,21 @@ Players can currently:
 - **`/leave`** Leave the PUG queue.
 - **`/remove`** Remove a player from the PUG queue.
 
+> [!TIP]
+> Use **`/help`** for more details.
+
 ---
+
+## Required Discord Permissions
+
+Grant the bot these Discord permissions for full functionality:
+
+### PUG Queue Features
+- **View Channels**: Allows it to update embeds with the current number of players in the queue.
+- **Manage Nicknames**: Allows it to change its nickname to display the current number of players in the queue.
+
+### Tournament Map Selection Features
+- **Create Events**: Allows it to create events on the server for scheduled matches.
 
 ## Hosting the Bot Yourself
 
@@ -85,18 +95,12 @@ To host the **Matcha** bot yourself, follow these steps:
    - **`MAPS`** - Map names, versions etc.
    - **`TEAMS`** - Team names, clan tags, roles etc.
 
-4. **Manage Permissons**
-   - Grant the bot these Discord permissions for full functionality:
-     - **View Channels**: Allows it to update embeds with the current number of players in the PUG queue.
-     - **Manage Nicknames**: Allows it to change its nickname to display the current number of players in the PUG queue.
-     - **Create Events**: Allows it to create events on the server for scheduled matches.
-
-5. **Configure Your Commands**
+4. **Configure Your Commands**
    - You may only want one of the two major functions of this bot. You can restrict usage of the bot's commands to specific channels, roles, and users.
    - Go to the following settings and edit the commands accordingly:
      - **Server Settings** -> **Apps** -> **Integrations** -> **Command Permissions**
 
-6. **Run the Bot**
+5. **Run the Bot**
 
 ---
 
@@ -104,5 +108,5 @@ To host the **Matcha** bot yourself, follow these steps:
 - [x] Add support for queueing pick-up games
 - [x] Add support for scheduling events
 - [ ] Add views (buttons, dropdowns) to map selection
-- [ ] Add data persistence (save data across restarts)
+- [ ] Add data persistence (save data across restarts/updates)
 - [ ] Make bot format-agnostic and allow support for more types of tournaments (or even different games)
