@@ -9,7 +9,7 @@ from discord import app_commands
 log = logging.getLogger(__name__)
 
 # Set up the timeout logic for the bot
-TIMEOUT_DURATION = 3*60*60  # 3 hours
+QUEUE_TIMEOUT = 3*60*60  # 3 hours
 
 class ButtonOnCooldown(commands.CommandError):
     pass
@@ -29,7 +29,7 @@ class MoreButtons(discord.ui.View):
             await interaction.response.send_message("Matcha is still warming up....", ephemeral=True)
             return
         
-        queue = cog.get_state(interaction.channel_id)
+        queue = cog.get_queue(interaction.channel_id)
 
         if not queue['players']:
             await interaction.response.send_message("Queue is empty.", ephemeral=True)
@@ -83,15 +83,15 @@ class MainButtons(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.green, emoji="\U0000270b", custom_id='persistent_view:queue_add')
+    @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.green, emoji="\U0000270b", custom_id='persistent_view:add_player')
     async def join_button(self, interaction, button):
         cog = interaction.client.get_cog("Pug")
         if not cog:
             await interaction.response.send_message("Matcha is still warming up....", ephemeral=True)
             return
 
-        added = await cog.queue_add(interaction.user.id, interaction.channel_id)
-        queue = cog.get_state(interaction.channel_id)
+        added = await cog.add_player(interaction.user.id, interaction.channel_id)
+        queue = cog.get_queue(interaction.channel_id)
 
         if not added:
             await interaction.response.send_message("You are already in the queue.", ephemeral=True)
@@ -101,15 +101,15 @@ class MainButtons(discord.ui.View):
             f"{interaction.user.mention} (`@{interaction.user.display_name}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
             allowed_mentions=discord.AllowedMentions(users=False))
 
-    @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.red, emoji="\U0001f44b", custom_id='persistent_view:queue_remove')
+    @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.red, emoji="\U0001f44b", custom_id='persistent_view:remove_player')
     async def leave_button(self, interaction, button):
         cog = interaction.client.get_cog("Pug")
         if not cog:
             await interaction.response.send_message("Matcha is still warming up....", ephemeral=True)
             return
 
-        removed = await cog.queue_remove(interaction.user.id, interaction.channel_id)
-        queue = cog.get_state(interaction.channel_id)
+        removed = await cog.remove_player(interaction.user.id, interaction.channel_id)
+        queue = cog.get_queue(interaction.channel_id)
 
         if not removed:
             await interaction.response.send_message("You are not in the queue.", ephemeral=True)
@@ -185,9 +185,9 @@ class Pug(commands.Cog):
         
         bot.add_view(MainButtons())
     
-    async def timeout_clear(self, channel_id):
+    async def handle_timeout(self, channel_id):
         try:
-            await asyncio.sleep(TIMEOUT_DURATION)
+            await asyncio.sleep(QUEUE_TIMEOUT)
 
             # Check if players are in queue
             queue = self.queue_handler.get(channel_id)
@@ -206,7 +206,7 @@ class Pug(commands.Cog):
             channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
             
             await channel.send(
-                f"PUG queue has been cleared of all players due to {int(TIMEOUT_DURATION // (60*60))} hours of inactivity. :pouring_liquid:")
+                f"PUG queue has been cleared of all players due to {int(QUEUE_TIMEOUT // (60*60))} hours of inactivity. :pouring_liquid:")
 
             guild = channel.guild
             log.info(f"Clearing PUG queue in {channel}, {guild}...")
@@ -214,12 +214,12 @@ class Pug(commands.Cog):
         except asyncio.CancelledError:
             pass
 
-    # Function to reset the timeout counter
-    def reset_timeout_counter(self, channel_id):
+    # Function to restart the timeout counter
+    def restart_timeout_task(self, channel_id):
         if channel_id in self.timeout_tasks:
             self.timeout_tasks[channel_id].cancel()
 
-        task = asyncio.create_task(self.timeout_clear(channel_id))
+        task = asyncio.create_task(self.handle_timeout(channel_id))
         self.timeout_tasks[channel_id] = task
 
     # Function to remove any active timeout counters in the channel
@@ -229,14 +229,14 @@ class Pug(commands.Cog):
             self.timeout_tasks.pop(channel_id, None)
 
     # Function to resolve interaction channel (bot must only take inputs from the channel it is being used in)
-    def get_state(self, channel_id):
+    def get_queue(self, channel_id):
         if channel_id not in self.queue_handler:
             self.queue_handler[channel_id] = {"players": []}
         return self.queue_handler[channel_id]
     
     # Build PUG panel embed
     def build_main_panel_embed(self, channel_id: int):
-        queue = self.get_state(channel_id)
+        queue = self.get_queue(channel_id)
 
         description=("Join the queue to play!\n\n"
                     "**Competitive rules apply**. Click **How to Play** for more info.")
@@ -342,7 +342,7 @@ class Pug(commands.Cog):
     
     # Change nickname according to the number of players in queue
     async def change_nickname(self, channel_id: int):
-        queue = self.get_state(channel_id)
+        queue = self.get_queue(channel_id)
         players = len(queue['players'])
 
         channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
@@ -374,23 +374,23 @@ class Pug(commands.Cog):
 
         self.nickname_tasks[channel_id] = asyncio.create_task(debounce_task())
     
-    # Function to join queue
-    async def queue_add(self, user_id: int, channel_id: int):
-        queue = self.get_state(channel_id)
+    # Function to add player to queue
+    async def add_player(self, user_id: int, channel_id: int):
+        queue = self.get_queue(channel_id)
 
         if user_id in queue['players']:
             return False
 
         queue['players'].append(user_id)
 
-        self.reset_timeout_counter(channel_id)
+        self.restart_timeout_task(channel_id)
         self.schedule_embed_update(channel_id)
         self.schedule_nickname_update(channel_id)
         return True
 
-    # Function to leave queue
-    async def queue_remove(self, user_id: int, channel_id: int):
-        queue = self.get_state(channel_id)
+    # Function to remove player from queue
+    async def remove_player(self, user_id: int, channel_id: int):
+        queue = self.get_queue(channel_id)
 
         if user_id not in queue['players']:
             return False
@@ -398,7 +398,7 @@ class Pug(commands.Cog):
         queue['players'].remove(user_id)
 
         if queue['players']:
-            self.reset_timeout_counter(channel_id)
+            self.restart_timeout_task(channel_id)
         else:
             await self.clear_timeout(channel_id)
 
@@ -430,9 +430,9 @@ class Pug(commands.Cog):
     # Command to join the queue
     @app_commands.command(name="join", description="Join the PUG queue")
     async def join_command(self, interaction: discord.Interaction):
-        queue = self.get_state(interaction.channel_id)
+        queue = self.get_queue(interaction.channel_id)
 
-        added = await self.queue_add(interaction.user.id, interaction.channel_id)
+        added = await self.add_player(interaction.user.id, interaction.channel_id)
         if not added:
             await interaction.response.send_message("You are already in the queue.", ephemeral=True)
             return
@@ -444,9 +444,9 @@ class Pug(commands.Cog):
     # Command to leave the queue
     @app_commands.command(name="leave", description="Leave the PUG queue")
     async def leave_command(self, interaction: discord.Interaction):
-        queue = self.get_state(interaction.channel_id)
+        queue = self.get_queue(interaction.channel_id)
 
-        removed = await self.queue_remove(interaction.user.id, interaction.channel_id)
+        removed = await self.remove_player(interaction.user.id, interaction.channel_id)
         if not removed:
             await interaction.response.send_message("You are not in the queue.", ephemeral=True)
             return
@@ -458,9 +458,9 @@ class Pug(commands.Cog):
     # Command to remove a player from the queue
     @app_commands.command(name="remove", description="Remove a player from the PUG queue")
     async def remove_command(self, interaction: discord.Interaction, player: discord.Member):
-        queue = self.get_state(interaction.channel_id)
+        queue = self.get_queue(interaction.channel_id)
 
-        removed = await self.queue_remove(player.id, interaction.channel_id)
+        removed = await self.remove_player(player.id, interaction.channel_id)
         if not removed:
             await interaction.response.send_message("Player is not in the queue.", allowed_mentions=None, ephemeral=True)
             return
