@@ -7,6 +7,7 @@ import random
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 # from dotenv import load_dotenv
 import discord
@@ -35,35 +36,35 @@ for _, name, _ in pkgutil.iter_modules([str(TOURNAMENTS_DIR)]):
 
     tournaments.append(tournament)
 
-tournaments.sort(key=lambda t: t._start_date, reverse=True)
+tournaments.sort(key=lambda tournament: tournament._start_date, reverse=True)
 
 # Initialize global state dictionary for map selection
 state_handler = {}
 timeout_tasks = {}
 
 # Set up the timeout logic for the bot
-TIMEOUT_DURATION = 72*60*60  # 72 hours
-TIMEOUT_NOTICE = 12*60*60 # 12 hours
+MAP_SELECTION_TIMEOUT = 72*60*60  # 72 hours
+TIMEOUT_NOTICE_WINDOW = 12*60*60 # 12 hours
 
-async def timeout_clear(bot: commands.Bot, channel_id):
+async def handle_timeout(bot: commands.Bot, channel_id):
     try:
-        notice_delay = TIMEOUT_DURATION - TIMEOUT_NOTICE
+        notice_delay = MAP_SELECTION_TIMEOUT - TIMEOUT_NOTICE_WINDOW
 
         await asyncio.sleep(notice_delay)
 
         channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
 
         await channel.send(
-            f":warning: Map selection will be cleared in {int(TIMEOUT_NOTICE // (60*60))} hours if there is no further activity.")
+            f":warning: Map selection will be cleared in {int(TIMEOUT_NOTICE_WINDOW // (60*60))} hours if there is no further activity.")
 
-        await asyncio.sleep(TIMEOUT_NOTICE)
+        await asyncio.sleep(TIMEOUT_NOTICE_WINDOW)
 
         # Clear map selection
         state_handler.pop(channel_id, None)
         timeout_tasks.pop(channel_id, None)
 
         await channel.send(
-            f"Map selection has timed out after {int(TIMEOUT_DURATION // (60*60))} hours of inactivity and has been cleared. :pouring_liquid:")
+            f"Map selection has timed out after {int(MAP_SELECTION_TIMEOUT // (60*60))} hours of inactivity and has been cleared. :pouring_liquid:")
 
         guild = channel.guild
         log.info(f"Clearing map selection in {channel}, {guild}...")
@@ -71,12 +72,12 @@ async def timeout_clear(bot: commands.Bot, channel_id):
     except asyncio.CancelledError:
         pass
 
-# Function to reset the timeout counter
-def reset_timeout_counter(bot: commands.Bot, channel_id):
+# Function to restart the timeout counter
+def restart_timeout_task(bot: commands.Bot, channel_id):
     if channel_id in timeout_tasks:
         timeout_tasks[channel_id].cancel()
 
-    task = asyncio.create_task(timeout_clear(bot, channel_id))
+    task = asyncio.create_task(handle_timeout(bot, channel_id))
     timeout_tasks[channel_id] = task
 
 # Function to remove any active timeout counters in the channel
@@ -169,6 +170,8 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
         description=":white_check_mark: Match is ready to go!",
         colour=0x6a994e
         )
+    
+    embed.set_author(name="Matcha", url="https://github.com/Muffin-Dono/matcha")
 
     # Function for formatting map picks/bans in embed fields
     def format_selections(maps, dash=False):
@@ -212,6 +215,8 @@ async def send_summary_embed(interaction: discord.Interaction, selection_state):
         name=f"{team2} Bans",
         value=format_selections(team2_bans, dash=True),
         inline=True)
+    
+    embed.set_footer(text="Created by Muffin-Dono")
 
     await asyncio.sleep(2)
     await interaction.followup.send(embed=embed)
@@ -258,7 +263,7 @@ class EventDescription(discord.ui.Modal):
         selection_state = state_handler.get(channel_id)
 
         if not selection_state:
-            return log.info("State not found (modal)")
+            return log.info("Map selection not found (modal)")
 
         bracket_url = selection_state["tournament"]["info"]["bracket_url"]
         vods_url = selection_state["tournament"]["info"]["vods_url"]
@@ -282,7 +287,7 @@ class EventDescription(discord.ui.Modal):
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
-            return log.info("State not found (on submit)")
+            return log.info("Map selection not found (on submit)")
 
         await schedule_match(interaction, selection_state, self.add_description.component.value)
         
@@ -291,7 +296,7 @@ class EventDescription(discord.ui.Modal):
                 await clear_timeout(interaction.channel_id)
         else:
             # Restarts the timeout counter when a command is used on time
-            reset_timeout_counter(interaction.client, interaction.channel_id)
+            restart_timeout_task(interaction.client, interaction.channel_id)
 
 class Tourney(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -325,7 +330,7 @@ class Tourney(commands.Cog):
 
     # Command to start map selection, with team assignment and coin toss
     @app_commands.command(name="match", description="Set the tournament and opposing teams for a match")
-    @discord.app_commands.describe(pool="Name of map pool you want to select from", team1="Name of team 1", team2="Name of team 2")
+    @app_commands.describe(pool="Name of map pool you want to select from", team1="Name of team 1", team2="Name of team 2")
     async def match_command(self, interaction: discord.Interaction, pool: str, team1: str, team2: str):
         # Check if map selection is already active in this channel
         if interaction.channel_id in state_handler:
@@ -351,6 +356,33 @@ class Tourney(commands.Cog):
         resolved_team1 = resolve_team_name(team1, TEAMS)
         resolved_team2 = resolve_team_name(team2, TEAMS)
 
+        if not resolved_team1 or not resolved_team2:
+            await interaction.response.send_message(
+                "Matcha doesn't recognise these teams...", ephemeral=True)
+            return
+        
+        server_role_names_lower = {role.name.lower() for role in interaction.guild.roles}
+
+        missing_roles = [
+            team["role"] for team in TEAMS.values()
+            if team["role"].lower() not in server_role_names_lower
+        ]
+        
+        missing_roles_warning = (
+            ":warning: **WARNING: The following team roles are missing from this server:**\n- "
+            + "\n- ".join(missing_roles)
+        )
+        
+        if not (
+            get_team_role(interaction, resolved_team1, TEAMS)
+            and get_team_role(interaction, resolved_team2, TEAMS)
+        ):
+            await interaction.response.send_message(
+                "Matcha couldn't find any matching Discord roles for your team...\n\n"
+                f"{missing_roles_warning}",
+                ephemeral=True)
+            return
+
         # Check if a user is in one of the opposing teams
         if not user_can_override(interaction.user) and not (
             user_is_on_team(interaction, interaction.user, resolved_team1, TEAMS)
@@ -359,11 +391,6 @@ class Tourney(commands.Cog):
         ):
             await interaction.response.send_message(
                 'You must belong to one of the selected teams. Otherwise, pick "Mixed Team".', ephemeral=True)
-            return
-
-        if not resolved_team1 or not resolved_team2:
-            await interaction.response.send_message(
-                "Team names are not recognized.", ephemeral=True)
             return
 
         if resolved_team1 == resolved_team2:
@@ -385,7 +412,7 @@ class Tourney(commands.Cog):
             "scheduled_event": {"start": None, "duration": None}
             }
 
-        log.info(f"Created state for channel: {interaction.channel_id}")
+        log.info(f"Created map selection for channel: {interaction.channel_id}")
 
         selection_state = state_handler[interaction.channel_id]
 
@@ -412,20 +439,11 @@ class Tourney(commands.Cog):
             ":exclamation: Choose whether your team bans first or second using **`/order`**.\n",
             allowed_mentions=discord.AllowedMentions(roles=False))
 
-        server_role_names_lower = {role.name.lower() for role in interaction.guild.roles}
-
-        missing_roles = [
-            info["role"] for name, info in TEAMS.items()
-            if info["role"].lower() not in server_role_names_lower
-        ]
-
         if missing_roles:
-            await interaction.followup.send(
-                ":warning: **WARNING: The following team roles are missing from your server:**\n- "
-                + "\n- ".join(missing_roles))
+            await interaction.followup.send(missing_roles_warning)
 
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.client, interaction.channel_id)
+        restart_timeout_task(interaction.client, interaction.channel_id)
 
     # Show user choice of tournaments
     @match_command.autocomplete('pool')
@@ -433,12 +451,12 @@ class Tourney(commands.Cog):
         self,
         interaction: discord.Interaction,
         current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
 
         options = [tournament.INFO["full_name"] for tournament in tournaments][:2]
 
         return [
-            discord.app_commands.Choice(name=opt, value=opt)
+            app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt.lower()
         ]
 
@@ -448,7 +466,7 @@ class Tourney(commands.Cog):
         self,
         interaction: discord.Interaction,
         current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         pool_name = interaction.namespace.pool.lower()
         
         tournament = next(
@@ -462,7 +480,7 @@ class Tourney(commands.Cog):
         options = list(tournament.TEAMS.keys()) + ["Mixed Team"]
 
         return [
-            discord.app_commands.Choice(name=opt, value=opt)
+            app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt.lower()
         ]
 
@@ -471,7 +489,7 @@ class Tourney(commands.Cog):
         self,
         interaction: discord.Interaction,
         current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         pool_name = interaction.namespace.pool.lower()
         
         tournament = next(
@@ -485,14 +503,14 @@ class Tourney(commands.Cog):
         options = list(tournament.TEAMS.keys()) + ["Mixed Team"]
 
         return [
-            discord.app_commands.Choice(name=opt, value=opt)
+            app_commands.Choice(name=opt, value=opt)
             for opt in options if current.lower() in opt.lower()
         ]
 
     # Command for the coin toss winner to pick the ban order
     @app_commands.command(name='order', description='Choose whether your team bans first or second')
-    @discord.app_commands.describe(choice="Ban first and pick second OR ban second and pick first", override="Organizers can override this phase")
-    async def order_command(self, interaction: discord.Interaction, choice: str, override: str = "No"):
+    @app_commands.describe(choice="Ban first and pick second OR ban second and pick first", override="Organizers can override this phase")
+    async def order_command(self, interaction: discord.Interaction, choice: Literal["Ban first (then pick second)", "Ban second (then pick first)"], override: Literal["Yes", "No"] = "No"):
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
@@ -523,20 +541,20 @@ class Tourney(commands.Cog):
                 ephemeral=True)
             return
 
-        if choice not in ["BAN first in banning phase, PICK second in picking phase", "BAN second in banning phase, PICK first in picking phase"]:
+        if choice not in ["Ban first (then pick second)", "Ban second (then pick first)"]:
             await interaction.response.send_message(
                 "Please choose one of the given options.", ephemeral=True)
             return
 
-        if not user_can_override(interaction.user) and override == "Yes":
+        if override == "Yes" and not user_can_override(interaction.user):
             await interaction.response.send_message(
                 "Only organizers can override this phase!", ephemeral=True)
             return
 
         if coin_toss_winner == team1:
-            selection_state["ban_order"] = [team1, team2] if choice == "BAN first in banning phase, PICK second in picking phase" else [team2, team1]
+            selection_state["ban_order"] = [team1, team2] if choice == "Ban first (then pick second)" else [team2, team1]
         else:
-            selection_state["ban_order"] = [team2, team1] if choice == "BAN first in banning phase, PICK second in picking phase" else [team1, team2]
+            selection_state["ban_order"] = [team2, team1] if choice == "Ban first (then pick second)" else [team1, team2]
 
         coin_toss_winner_mention = get_team_mention(interaction, coin_toss_winner, TEAMS)
 
@@ -549,40 +567,12 @@ class Tourney(commands.Cog):
             allowed_mentions=discord.AllowedMentions(roles=False))
 
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.client, interaction.channel_id)
-
-    # Show user the two options (First or Second)
-    @order_command.autocomplete('choice')
-    async def order_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
-
-        options = ["BAN first in banning phase, PICK second in picking phase", "BAN second in banning phase, PICK first in picking phase"]
-        return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
-        ]
-
-    # Show user the two options (Yes or No)
-    @order_command.autocomplete('override')
-    async def order_override_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
-
-        options = ["Yes","No"]
-        return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
-        ]
+        restart_timeout_task(interaction.client, interaction.channel_id)
 
     # Command for banning maps
     @app_commands.command(name='map_ban', description='Ban a map')
-    @discord.app_commands.describe(map="Select a map to ban", override="Organizers can override this phase")
-    async def map_ban_command(self, interaction: discord.Interaction, map: str, override: str = "No"):
+    @app_commands.describe(map="Select a map to ban", override="Organizers can override this phase")
+    async def map_ban_command(self, interaction: discord.Interaction, map: str, override: Literal["Yes", "No"] = "No"):
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
@@ -640,7 +630,7 @@ class Tourney(commands.Cog):
                 f"Only {banning_team_mention} can ban right now.", ephemeral=True, allowed_mentions=discord.AllowedMentions(roles=False))
             return
 
-        if not user_can_override(interaction.user) and override == "Yes":
+        if override == "Yes" and not user_can_override(interaction.user):
             await interaction.response.send_message(
                 "Only organizers can override this phase!", ephemeral=True)
             return
@@ -657,7 +647,9 @@ class Tourney(commands.Cog):
 
         if banned_map not in standard_maps:
             await interaction.response.send_message(
-                "Please choose a remaining map from the Standard map pool:\n" + "\n".join([f"- {map}" for map in standard_maps]))
+                f"Matcha can't ban \"{map}\"...\n\n"
+                "Please choose a remaining map from the Standard map pool:\n" + "\n".join([f"- {map}" for map in standard_maps]),
+                ephemeral=True)
             return
 
         selection_state["bans"][f"{banning_team_key}"].append(banned_map)
@@ -688,7 +680,7 @@ class Tourney(commands.Cog):
             )
 
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.client, interaction.channel_id)
+        restart_timeout_task(interaction.client, interaction.channel_id)
 
     # Show user the choice of maps to ban
     @map_ban_command.autocomplete('map')
@@ -696,7 +688,7 @@ class Tourney(commands.Cog):
         self,
         interaction: discord.Interaction,
         current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
@@ -704,28 +696,14 @@ class Tourney(commands.Cog):
 
         options = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Standard"]
         return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
-        ]
-
-    # Show user the two options (Yes or No)
-    @map_ban_command.autocomplete('override')
-    async def map_ban_override_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
-
-        options = ["Yes","No"]
-        return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
+            app_commands.Choice(name=opt, value=opt)
+            for opt in options if current.lower() in opt.lower()
         ]
 
     # Command for picking maps
     @app_commands.command(name="map_pick", description='Pick a map')
-    @discord.app_commands.describe(map="Select a map to pick", override="Organizers can override this phase")
-    async def map_pick_command(self, interaction: discord.Interaction, map: str, override: str = "No"):
+    @app_commands.describe(map="Select a map to pick", override="Organizers can override this phase")
+    async def map_pick_command(self, interaction: discord.Interaction, map: str, override: Literal["Yes", "No"] = "No"):
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
@@ -762,7 +740,7 @@ class Tourney(commands.Cog):
                 f"Only {picking_team_mention} can pick a map right now.", ephemeral=True, allowed_mentions=discord.AllowedMentions(roles=False))
             return
 
-        if not user_can_override(interaction.user) and override == "Yes":
+        if override == "Yes" and not user_can_override(interaction.user):
             await interaction.response.send_message(
                 "Only organizers can override this phase!", ephemeral=True)
             return
@@ -789,7 +767,9 @@ class Tourney(commands.Cog):
 
             if picked_map not in standard_maps:
                 await interaction.response.send_message(
-                    "Please choose a remaining map from the pool:\n" + "\n".join([f"- {map}" for map in standard_maps] + ["- INVOKE WILDCARD"]))
+                    f"Matcha can't pick \"{map}\"...\n\n"
+                    "Please choose a remaining map from the pool:\n" + "\n".join([f"- {map}" for map in standard_maps] + ["- INVOKE WILDCARD"]),
+                    ephemeral=True)
                 return
 
         # Prevent a team from picking twice
@@ -810,7 +790,7 @@ class Tourney(commands.Cog):
 
             await interaction.response.send_message(
                 f"{picking_team_mention} has {added_text}: **__{picked_map}__**\n\n"
-                f":exclamation: **{next_team_mention}**, please pick a map using **`/map_pick`**.",
+                f":exclamation: **{next_team_mention}** - pick a map using **`/map_pick`**.",
                 allowed_mentions=discord.AllowedMentions(roles=False))
 
         if all(selection_state["picks"].values()):
@@ -833,7 +813,7 @@ class Tourney(commands.Cog):
                     await clear_timeout(interaction.channel_id)
                 else:
                     # Restarts the timeout counter when a command is used on time
-                    reset_timeout_counter(interaction.client, interaction.channel_id)
+                    restart_timeout_task(interaction.client, interaction.channel_id)
 
             else:
                 team1_mention = get_team_mention(interaction, team1, TEAMS)
@@ -847,7 +827,7 @@ class Tourney(commands.Cog):
                 allowed_mentions=discord.AllowedMentions(roles=False))
 
         # Restarts the timeout counter when a command is used on time
-        reset_timeout_counter(interaction.client, interaction.channel_id)
+        restart_timeout_task(interaction.client, interaction.channel_id)
 
     # Show user the choice of maps to pick
     @map_pick_command.autocomplete('map')
@@ -855,7 +835,7 @@ class Tourney(commands.Cog):
         self,
         interaction: discord.Interaction,
         current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
@@ -866,28 +846,14 @@ class Tourney(commands.Cog):
         standard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Standard"]
         options = standard_maps + (["INVOKE WILDCARD"] if "Wildcard" in map_pools else [])
         return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
-        ]
-
-    # Show user the two options (Yes or No)
-    @map_pick_command.autocomplete('override')
-    async def map_pick_override_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
-
-        options = ["Yes","No"]
-        return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
+            app_commands.Choice(name=opt, value=opt)
+            for opt in options if current.lower() in opt.lower()
         ]
 
     # Command for picking maps
     @app_commands.command(name="map_final", description='Choose whether the final map is from the Standard or Wildcard map pool')
-    @discord.app_commands.describe(choice="Standard/Wildcard", override="Organizers can override this phase")
-    async def map_final_command(self, interaction: discord.Interaction, choice: str, override: str = "No"):
+    @app_commands.describe(choice="Standard/Wildcard", override="Organizers can override this phase")
+    async def map_final_command(self, interaction: discord.Interaction, choice: str, override: Literal["Yes", "No"] = "No"):
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
@@ -919,7 +885,7 @@ class Tourney(commands.Cog):
                 "You must belong to one of the opposing teams.", ephemeral=True)
             return
 
-        if not user_can_override(interaction.user) and override == "Yes":
+        if override == "Yes" and not user_can_override(interaction.user):
             await interaction.response.send_message(
                 "Only organizers can override this phase!", ephemeral=True)
             return
@@ -985,7 +951,7 @@ class Tourney(commands.Cog):
                 await clear_timeout(interaction.channel_id)
         else:
             # Restarts the timeout counter when a command is used on time
-            reset_timeout_counter(interaction.client, interaction.channel_id)
+            restart_timeout_task(interaction.client, interaction.channel_id)
 
     # Show user the choice of maps to pick
     @map_final_command.autocomplete('choice')
@@ -993,7 +959,7 @@ class Tourney(commands.Cog):
         self,
         interaction: discord.Interaction,
         current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
@@ -1001,27 +967,13 @@ class Tourney(commands.Cog):
 
         options = selection_state["tournament"]["map_pools"]
         return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
-        ]
-
-    # Show user the two options (Yes or No)
-    @map_final_command.autocomplete('override')
-    async def map_final_override_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
-
-        options = ["Yes","No"]
-        return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
+            app_commands.Choice(name=opt, value=opt)
+            for opt in options if current.lower() in opt.lower()
         ]
     
     @app_commands.command(name="schedule", description="Create a Discord event for a match")
-    @discord.app_commands.describe(start="Start time of match (use @time)", description="Customize the event description or use the tournament's default template", duration="Expected duration of the event in minutes")
-    async def schedule_command(self, interaction: discord.Interaction, start: app_commands.Timestamp, description: str = "Customize", duration: int = 120):
+    @app_commands.describe(start="Start time of match (use @time)", description="Customize the event description or use the tournament's default template", duration="Expected duration of the event in minutes")
+    async def schedule_command(self, interaction: discord.Interaction, start: app_commands.Timestamp, description: Literal["Customize", "Default"] = "Customize", duration: int = 120):
         selection_state = state_handler.get(interaction.channel_id)
 
         if not selection_state:
@@ -1058,25 +1010,11 @@ class Tourney(commands.Cog):
                 await clear_timeout(interaction.channel_id)
             else:
                 # Restarts the timeout counter when a command is used on time
-                reset_timeout_counter(interaction.client, interaction.channel_id)
+                restart_timeout_task(interaction.client, interaction.channel_id)
         else:
             event_modal = EventDescription(interaction.channel_id)
         
             await interaction.response.send_modal(event_modal)
-    
-    # Show user the two options (Yes or No)
-    @schedule_command.autocomplete('description')
-    async def schedule_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[discord.app_commands.Choice[str]]:
-
-        options = ["Customize","Default"]
-        return [
-            discord.app_commands.Choice(name=opt, value=opt)
-            for opt in options if current.lower() in opt
-        ]
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Tourney(bot))
