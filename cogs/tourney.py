@@ -101,9 +101,7 @@ def resolve_map_name(map_name, MAPS):
 
 # Check if a user has the required perms to override team role restrictions
 def user_can_override(member):
-    return (
-        any(role.permissions.administrator for role in member.roles)
-        or any(role.name == "Organizer" for role in member.roles))
+    return any(role.permissions.administrator or role.permissions.manage_events for role in member.roles)
 
 # Function to resolve input team name and return correct team name
 def resolve_team_name(team_name, TEAMS):
@@ -277,7 +275,7 @@ class EventDescription(discord.ui.Modal):
         )
     
         self.add_description = discord.ui.Label(
-            text="Write a description for your event",
+            text="Event Description",
             component=discord.ui.TextInput(style=discord.TextStyle.long, default=default_description)
         )
 
@@ -412,7 +410,7 @@ class Tourney(commands.Cog):
             "scheduled_event": {"start": None, "duration": None}
             }
 
-        log.info(f"Created map selection for channel: {interaction.channel_id}")
+        log.info(f"Created map selection ({resolved_team1} vs {resolved_team2}) in channel: {interaction.channel_id}")
 
         selection_state = state_handler[interaction.channel_id]
 
@@ -678,6 +676,11 @@ class Tourney(commands.Cog):
                 f":exclamation: **{picking_team_mention}**, please pick a map using **`/map_pick`**.",
                 allowed_mentions=discord.AllowedMentions(roles=False)
             )
+        
+        log.debug("Banning phase completed in channel: %s | remaining=%s",
+                  interaction.channel_id,
+                  list(selection_state["remaining_maps"].keys())
+                  )
 
         # Restarts the timeout counter when a command is used on time
         restart_timeout_task(interaction.client, interaction.channel_id)
@@ -798,6 +801,12 @@ class Tourney(commands.Cog):
                 f"{picking_team_mention} has {added_text}: **__{picked_map}__**\n\n"
                 "**Picking phase complete! :ballot_box_with_check:**\n\n",
                 allowed_mentions=discord.AllowedMentions(roles=False))
+            
+            log.debug("Picking phase completed in channel: %s | remaining=%s",
+                      interaction.channel_id,
+                      list(selection_state["remaining_maps"].keys())
+                      )
+            
             if len(MAP_POOLS) == 1:
                 final_maps = list(selection_state["remaining_maps"].keys())
                 selection_state["random_map"] = random.choice(final_maps)
