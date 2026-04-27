@@ -65,10 +65,8 @@ class Matcha(commands.Bot):
 
         asyncio.create_task(self.setup_bot())
 
-        # guild = discord.Object(id=server)
-
         # # Clear command tree
-        # self.tree.clear_commands(guild=guild)
+        # self.tree.clear_commands(guild=None)
 
         # Global sync
         synced = await self.tree.sync()
