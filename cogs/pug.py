@@ -90,16 +90,19 @@ class MainButtons(discord.ui.View):
             await interaction.response.send_message("Matcha is still warming up....", ephemeral=True)
             return
 
-        added = await cog.add_player(interaction.user.id, interaction.channel_id)
+        result = await cog.add_player(interaction.user.id, interaction.channel_id)
         queue = cog.get_queue(interaction.channel_id)
 
-        if not added:
+        if result == "already queued":
             await interaction.response.send_message("You are already in the queue.", ephemeral=True)
             return
-
-        await interaction.response.send_message(
-            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
-            allowed_mentions=discord.AllowedMentions(users=False))
+        elif result == "queue is full":
+            await interaction.response.send_message("The queue is full (30 players). Please wait for a spot to open :tea:.", ephemeral=True)
+            return
+        elif result == "added":
+            await interaction.response.send_message(
+                f"{interaction.user.mention} (`{interaction.user.mention}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                allowed_mentions=discord.AllowedMentions(users=False))
 
     @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.red, emoji="\U0001f44b", custom_id='persistent_view:remove_player')
     async def leave_button(self, interaction, button):
@@ -108,16 +111,16 @@ class MainButtons(discord.ui.View):
             await interaction.response.send_message("Matcha is still warming up....", ephemeral=True)
             return
 
-        removed = await cog.remove_player(interaction.user.id, interaction.channel_id)
+        result = await cog.remove_player(interaction.user.id, interaction.channel_id)
         queue = cog.get_queue(interaction.channel_id)
 
-        if not removed:
+        if result == "not in queue":
             await interaction.response.send_message("You are not in the queue.", ephemeral=True)
             return
-
-        await interaction.response.send_message(
-            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
-            allowed_mentions=discord.AllowedMentions(users=False))
+        elif result == "removed":
+            await interaction.response.send_message(
+                f"{interaction.user.mention} (`{interaction.user.mention}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                allowed_mentions=discord.AllowedMentions(users=False))
 
     @discord.ui.button(label="How to Play", style=discord.ButtonStyle.blurple, emoji="\U0001f5d2", custom_id='persistent_view:how_to_play')
     async def how_to_play_button(self, interaction, button):
@@ -184,6 +187,11 @@ class Pug(commands.Cog):
         self.nickname_tasks = {}
         
         bot.add_view(MainButtons())
+    
+    remove_group = app_commands.Group(
+        name="remove",
+        description="Remove commands"
+    )
     
     async def handle_timeout(self, channel_id):
         try:
@@ -277,12 +285,15 @@ class Pug(commands.Cog):
 
             if players > 20:
                 embed.add_field(
-                    name="\u200b",
-                    value="\n".join(
-                        f"{i+21}. <@{user_id}>"
-                        for i, user_id in enumerate(queue['players'][20:30])
-                    ),
-                    inline=True
+                    name="",
+                    value=f"\n**...and {players - 20} more waiting to play!**",
+                    inline=False
+                )
+
+                embed.add_field(
+                    name="",
+                    value=" ~ ".join([":wind_chime:"] * (players - 20)),
+                    inline=False
                 )
 
         embed.set_footer(text="Created by Muffin-Dono")
@@ -379,21 +390,24 @@ class Pug(commands.Cog):
         queue = self.get_queue(channel_id)
 
         if user_id in queue['players']:
-            return False
+            return "already queued"
 
+        if len(queue['players']) >= 30:
+            return "queue is full"
+        
         queue['players'].append(user_id)
 
         self.restart_timeout_task(channel_id)
         self.schedule_embed_update(channel_id)
         self.schedule_nickname_update(channel_id)
-        return True
+        return "added"
 
     # Function to remove player from queue
     async def remove_player(self, user_id: int, channel_id: int):
         queue = self.get_queue(channel_id)
 
         if user_id not in queue['players']:
-            return False
+            return "not in queue"
 
         queue['players'].remove(user_id)
 
@@ -405,7 +419,7 @@ class Pug(commands.Cog):
         self.schedule_embed_update(channel_id)
         self.schedule_nickname_update(channel_id)
         
-        return True
+        return "removed"
 
     # Command to open PUG prompt
     @app_commands.command(name="pug", description="Open the PUG panel and view the queue")
@@ -432,13 +446,16 @@ class Pug(commands.Cog):
     async def join_command(self, interaction: discord.Interaction):
         queue = self.get_queue(interaction.channel_id)
 
-        added = await self.add_player(interaction.user.id, interaction.channel_id)
-        if not added:
+        result = await self.add_player(interaction.user.id, interaction.channel_id)
+        if result == "already queued":
             await interaction.response.send_message("You are already in the queue.", ephemeral=True)
             return
-        else:
+        elif result == "queue is full":
+            await interaction.response.send_message("The queue is full (30 players). Please wait for a spot to open :tea:.", ephemeral=True)
+            return
+        elif result == "added":
             await interaction.response.send_message(
-                f"{interaction.user.mention} (`@{interaction.user.display_name}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                f"{interaction.user.mention} (`{interaction.user.mention}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
                 allowed_mentions=discord.AllowedMentions(users=False))
 
     # Command to leave the queue
@@ -446,33 +463,71 @@ class Pug(commands.Cog):
     async def leave_command(self, interaction: discord.Interaction):
         queue = self.get_queue(interaction.channel_id)
 
-        removed = await self.remove_player(interaction.user.id, interaction.channel_id)
-        if not removed:
+        result = await self.remove_player(interaction.user.id, interaction.channel_id)
+        if result == "not in queue":
             await interaction.response.send_message("You are not in the queue.", ephemeral=True)
             return
-        else:
+        elif result == "removed":
             await interaction.response.send_message(
-                f"{interaction.user.mention} (`@{interaction.user.display_name}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                f"{interaction.user.mention} (`{interaction.user.mention}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
                 allowed_mentions=discord.AllowedMentions(users=False))
 
     # Command to remove a player from the queue
-    @app_commands.command(name="remove", description="Remove a player from the PUG queue")
-    async def remove_command(self, interaction: discord.Interaction, player: discord.Member):
+    @remove_group.command(name="player", description="Remove a player from the PUG queue")
+    async def remove_player_command(self, interaction: discord.Interaction, player: discord.Member):
         queue = self.get_queue(interaction.channel_id)
 
-        removed = await self.remove_player(player.id, interaction.channel_id)
-        if not removed:
+        result = await self.remove_player(player.id, interaction.channel_id)
+        if not result:
             await interaction.response.send_message("Player is not in the queue.", allowed_mentions=None, ephemeral=True)
             return
 
         await interaction.response.send_message(
-            f"{interaction.user.mention} has removed {player.mention} from the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+            f"{interaction.user.mention} has removed {player.mention} from the queue -----> **{len(queue['players'])} player(s) in queue**",
             allowed_mentions=discord.AllowedMentions(users=False))
 
-        await player.send(
-            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has removed you from the queue. :leaves:\n"
+        try:
+            await player.send(
+            f"{interaction.user.mention} (`{interaction.user.mention}`) has removed you from the queue. :leaves:\n"
             f"> <#{interaction.channel_id}>\n\n",
             allowed_mentions=discord.AllowedMentions(users=False))
+        except discord.Forbidden:
+            pass
+        except discord.HTTPException:
+            pass
+    
+    @remove_group.command(name="all", description="Remove all players from the PUG queue")
+    async def remove_all_command(self, interaction: discord.Interaction):
+        queue = self.get_queue(interaction.channel_id)
+
+        if queue["players"]:
+            user_ids = queue["players"]
+
+            queue["players"].clear()
+
+            await interaction.response.send_message(
+            f"{interaction.user.mention} has removed all players from the queue.",
+            allowed_mentions=discord.AllowedMentions(users=False))
+
+            await self.clear_timeout(interaction.channel_id)
+            self.schedule_embed_update(interaction.channel_id)
+            self.schedule_nickname_update(interaction.channel_id)
+
+            for user_id in user_ids:
+                try:
+                    player = interaction.guild.get_member(user_id) or await interaction.guild.fetch_member(user_id)
+
+                    await player.send(
+                        f"{interaction.user.mention} (`{interaction.user.mention}`) has removed you from the queue. :leaves:\n"
+                        f"> <#{interaction.channel_id}>\n\n",
+                        allowed_mentions=discord.AllowedMentions(users=False))
+                except discord.Forbidden:
+                    pass
+                except discord.HTTPException:
+                    pass
+        else:
+            await interaction.response.send_message(
+            f"There are no players in this queue.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Pug(bot))

@@ -46,6 +46,19 @@ Players can currently:
 
 ---
 
+## Required Discord Permissions
+
+Grant the bot these Discord permissions for full functionality:
+
+### PUG Queue Features
+- **View Channels, Read Message History**: Allows it to update embeds with the current number of players in the queue.
+- **Change Nickname**: Allows it to change its nickname to display the current number of players in the queue.
+
+### Tournament Map Selection Features
+- **Create Events**: Allows it to create events on the server for scheduled matches.
+
+---
+
 ## Useful Commands
 
 ### Tournament Commands
@@ -62,23 +75,13 @@ Players can currently:
 - **`/pug`** Opens the PUG Panel.
 - **`/join`** Join the PUG queue.
 - **`/leave`** Leave the PUG queue.
-- **`/remove`** Remove a player from the PUG queue.
+- **`/remove player`** Remove a player from the PUG queue.
+- **`/remove all`** Remove all players from the PUG queue.
 
 > [!TIP]
 > Use **`/help`** for more details.
 
 ---
-
-## Required Discord Permissions
-
-Grant the bot these Discord permissions for full functionality:
-
-### PUG Queue Features
-- **View Channels**: Allows it to update embeds with the current number of players in the queue.
-- **Manage Nicknames**: Allows it to change its nickname to display the current number of players in the queue.
-
-### Tournament Map Selection Features
-- **Create Events**: Allows it to create events on the server for scheduled matches.
 
 ## Hosting the Bot Yourself
 

@@ -18,7 +18,8 @@ def build_pug_help_embed():
             "- **`/pug`** - Open the PUG panel (options menu for queue).\n"
             "- **`/join`** - Join the PUG queue.\n"
             "- **`/leave`** - Leave the PUG queue.\n"
-            "- **`/remove`** - Remove a player from the PUG queue.\n\n"
+            "- **`/remove player`** - Remove a player from the PUG queue.\n"
+            "- **`/remove all`** - Remove all players from the PUG queue.\n\n"
             "**PUG Panel Actions Menu**\n"
             "- **Ping Queue** - DM players in queue - usually when 10 players have joined.\n"
             "- **Map Vote** - Start a map vote for the PUG. Planned - tentative.\n"
@@ -39,7 +40,7 @@ def build_tourney_help_embed():
         name="",
         value=(
             "- **`/clear`** - Clears any active map selection in the channel.\n"
-            "- **`/schedule`** (organizers only) - Create a Discord event on the server for a match.\n\n"
+            "- **`/schedule`** (organizers only) - Creates a Discord event on the server for a match.\n\n"
             "**Selecting Maps for your Match**\n"
             "1. **`/match`** - Set the two opposing teams and start the coin toss.\n"
             "2. **`/order`** - Decide your team's pick and ban order.\n"
