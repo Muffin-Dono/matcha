@@ -101,7 +101,7 @@ class MainButtons(discord.ui.View):
             return
         elif result == "added":
             await interaction.response.send_message(
-                f"{interaction.user.mention} (`{interaction.user.mention}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                f"{interaction.user.mention} (`@{interaction.user.display_name}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
                 allowed_mentions=discord.AllowedMentions(users=False))
 
     @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.red, emoji="\U0001f44b", custom_id='persistent_view:remove_player')
@@ -119,7 +119,7 @@ class MainButtons(discord.ui.View):
             return
         elif result == "removed":
             await interaction.response.send_message(
-                f"{interaction.user.mention} (`{interaction.user.mention}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                f"{interaction.user.mention} (`@{interaction.user.display_name}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
                 allowed_mentions=discord.AllowedMentions(users=False))
 
     @discord.ui.button(label="How to Play", style=discord.ButtonStyle.blurple, emoji="\U0001f5d2", custom_id='persistent_view:how_to_play')
@@ -455,7 +455,7 @@ class Pug(commands.Cog):
             return
         elif result == "added":
             await interaction.response.send_message(
-                f"{interaction.user.mention} (`{interaction.user.mention}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                f"{interaction.user.mention} (`@{interaction.user.display_name}`) has joined the queue -----> **{len(queue['players'])} player(s) in queue**\n",
                 allowed_mentions=discord.AllowedMentions(users=False))
 
     # Command to leave the queue
@@ -469,7 +469,7 @@ class Pug(commands.Cog):
             return
         elif result == "removed":
             await interaction.response.send_message(
-                f"{interaction.user.mention} (`{interaction.user.mention}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
+                f"{interaction.user.mention} (`@{interaction.user.display_name}`) has left the queue -----> **{len(queue['players'])} player(s) in queue**\n",
                 allowed_mentions=discord.AllowedMentions(users=False))
 
     # Command to remove a player from the queue
@@ -488,7 +488,7 @@ class Pug(commands.Cog):
 
         try:
             await player.send(
-            f"{interaction.user.mention} (`{interaction.user.mention}`) has removed you from the queue. :leaves:\n"
+            f"{interaction.user.mention} (`@{interaction.user.display_name}`) has removed you from the queue. :leaves:\n"
             f"> <#{interaction.channel_id}>\n\n",
             allowed_mentions=discord.AllowedMentions(users=False))
         except discord.Forbidden:
@@ -518,7 +518,7 @@ class Pug(commands.Cog):
                     player = interaction.guild.get_member(user_id) or await interaction.guild.fetch_member(user_id)
 
                     await player.send(
-                        f"{interaction.user.mention} (`{interaction.user.mention}`) has removed you from the queue. :leaves:\n"
+                        f"{interaction.user.mention} (`@{interaction.user.display_name}`) has removed you from the queue. :leaves:\n"
                         f"> <#{interaction.channel_id}>\n\n",
                         allowed_mentions=discord.AllowedMentions(users=False))
                 except discord.Forbidden:
