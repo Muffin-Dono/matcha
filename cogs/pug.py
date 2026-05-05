@@ -197,14 +197,12 @@ class Pug(commands.Cog):
         try:
             await asyncio.sleep(QUEUE_TIMEOUT)
 
-            # Check if players are in queue
-            queue = self.queue_handler.get(channel_id)
-            if not queue or not queue['players']:
+            # Check if queue still exists
+            if channel_id not in self.queue_handler:
                 return
 
             # Clear queue
             self.queue_handler.pop(channel_id, None)
-            self.timeout_tasks.pop(channel_id, None)
 
             # # Refresh panel and change nickname
             await self.refresh_panel(channel_id)
@@ -212,6 +210,9 @@ class Pug(commands.Cog):
 
             await self.change_nickname(channel_id)
             await asyncio.sleep(1)
+
+            if channel_id in self.queue_handler:
+                return
 
             # Notify channel that queue has been cleared
             channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
@@ -225,10 +226,15 @@ class Pug(commands.Cog):
         except asyncio.CancelledError:
             pass
 
+        finally:
+            # Clean up timeout task
+            self.timeout_tasks.pop(channel_id, None)
+
     # Function to restart the timeout counter
     def restart_timeout_task(self, channel_id):
         if channel_id in self.timeout_tasks:
             self.timeout_tasks[channel_id].cancel()
+            self.timeout_tasks.pop(channel_id, None)
 
         task = asyncio.create_task(self.handle_timeout(channel_id))
         self.timeout_tasks[channel_id] = task

@@ -67,7 +67,6 @@ async def handle_timeout(bot: commands.Bot, channel_id):
 
         # Clear map selection
         state_handler.pop(channel_id, None)
-        timeout_tasks.pop(channel_id, None)
 
         await channel.send(
             f"Map selection has timed out after {int(MAP_SELECTION_TIMEOUT // (60*60))} hours of inactivity and has been cleared. :pouring_liquid:")
@@ -77,6 +76,10 @@ async def handle_timeout(bot: commands.Bot, channel_id):
 
     except asyncio.CancelledError:
         pass
+
+    finally:
+        # Clean up timeout task
+        timeout_tasks.pop(channel_id, None)
 
 # Function to restart the timeout counter
 def restart_timeout_task(bot: commands.Bot, channel_id):
