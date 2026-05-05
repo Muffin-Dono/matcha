@@ -28,7 +28,7 @@ class MoreButtons(discord.ui.View):
         if not cog:
             await interaction.response.send_message("Matcha is still warming up....", ephemeral=True)
             return
-        
+
         queue = cog.get_queue(interaction.channel_id)
 
         if not queue['players']:
@@ -185,14 +185,14 @@ class Pug(commands.Cog):
         self.panel_messages = {}
         self.embed_tasks = {}
         self.nickname_tasks = {}
-        
+
         bot.add_view(MainButtons())
-    
+
     remove_group = app_commands.Group(
         name="remove",
         description="Remove commands"
     )
-    
+
     async def handle_timeout(self, channel_id):
         try:
             await asyncio.sleep(QUEUE_TIMEOUT)
@@ -205,14 +205,17 @@ class Pug(commands.Cog):
             # Clear queue
             self.queue_handler.pop(channel_id, None)
             self.timeout_tasks.pop(channel_id, None)
-            
+
             # # Refresh panel and change nickname
             await self.refresh_panel(channel_id)
+            await asyncio.sleep(1)
+
             await self.change_nickname(channel_id)
+            await asyncio.sleep(1)
 
             # Notify channel that queue has been cleared
             channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
-            
+
             await channel.send(
                 f"PUG queue has been cleared of all players due to {int(QUEUE_TIMEOUT // (60*60))} hours of inactivity. :pouring_liquid:")
 
@@ -241,7 +244,7 @@ class Pug(commands.Cog):
         if channel_id not in self.queue_handler:
             self.queue_handler[channel_id] = {"players": []}
         return self.queue_handler[channel_id]
-    
+
     # Build PUG panel embed
     def build_main_panel_embed(self, channel_id: int):
         queue = self.get_queue(channel_id)
@@ -299,7 +302,7 @@ class Pug(commands.Cog):
         embed.set_footer(text="Created by Muffin-Dono")
 
         return embed
-    
+
     # Refresh PUG panel embed
     async def refresh_panel(self, channel_id: int):
         if channel_id not in self.panel_messages:
@@ -316,7 +319,7 @@ class Pug(commands.Cog):
                 await msg.edit(embed=panel, view=main_buttons)
             except discord.NotFound:
                 pass
-    
+
     # Function to schedule a debounced update for the PUG panel
     def schedule_embed_update(self, channel_id):
 
@@ -326,12 +329,12 @@ class Pug(commands.Cog):
                 await self.refresh_panel(channel_id)
             finally:
                 self.embed_tasks.pop(channel_id, None)
-        
+
         if channel_id in self.embed_tasks:
             self.embed_tasks[channel_id].cancel()
 
         self.embed_tasks[channel_id] = asyncio.create_task(debounce_task())
-    
+
     # Build Actions panel embed
     def build_more_panel_embed(self, channel_id: int):
         embed = discord.Embed(
@@ -350,7 +353,7 @@ class Pug(commands.Cog):
         embed.set_footer(text="Created by Muffin-Dono")
 
         return embed
-    
+
     # Change nickname according to the number of players in queue
     async def change_nickname(self, channel_id: int):
         queue = self.get_queue(channel_id)
@@ -379,12 +382,12 @@ class Pug(commands.Cog):
                 await self.change_nickname(channel_id)
             finally:
                 self.nickname_tasks.pop(channel_id, None)
-        
+
         if channel_id in self.nickname_tasks:
             self.nickname_tasks[channel_id].cancel()
 
         self.nickname_tasks[channel_id] = asyncio.create_task(debounce_task())
-    
+
     # Function to add player to queue
     async def add_player(self, user_id: int, channel_id: int):
         queue = self.get_queue(channel_id)
@@ -394,7 +397,7 @@ class Pug(commands.Cog):
 
         if len(queue['players']) >= 30:
             return "queue is full"
-        
+
         queue['players'].append(user_id)
 
         self.restart_timeout_task(channel_id)
@@ -418,7 +421,7 @@ class Pug(commands.Cog):
 
         self.schedule_embed_update(channel_id)
         self.schedule_nickname_update(channel_id)
-        
+
         return "removed"
 
     # Command to open PUG prompt
@@ -495,7 +498,7 @@ class Pug(commands.Cog):
             pass
         except discord.HTTPException:
             pass
-    
+
     @remove_group.command(name="all", description="Remove all players from the PUG queue")
     async def remove_all_command(self, interaction: discord.Interaction):
         queue = self.get_queue(interaction.channel_id)
