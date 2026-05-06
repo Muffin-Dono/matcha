@@ -29,7 +29,7 @@ class MoreButtons(discord.ui.View):
             await interaction.response.send_message("Matcha is still warming up....", ephemeral=True)
             return
 
-        queue = cog.get_queue(interaction.channel_id)
+        queue = cog.resolve_queue(interaction.channel_id)
 
         if not queue['players']:
             await interaction.response.send_message("Queue is empty.", ephemeral=True)
@@ -91,7 +91,7 @@ class MainButtons(discord.ui.View):
             return
 
         result = await cog.add_player(interaction.user.id, interaction.channel_id)
-        queue = cog.get_queue(interaction.channel_id)
+        queue = cog.resolve_queue(interaction.channel_id)
 
         if result == "already queued":
             await interaction.response.send_message("You are already in the queue.", ephemeral=True)
@@ -112,7 +112,7 @@ class MainButtons(discord.ui.View):
             return
 
         result = await cog.remove_player(interaction.user.id, interaction.channel_id)
-        queue = cog.get_queue(interaction.channel_id)
+        queue = cog.resolve_queue(interaction.channel_id)
 
         if result == "not in queue":
             await interaction.response.send_message("You are not in the queue.", ephemeral=True)
@@ -153,7 +153,7 @@ class MainButtons(discord.ui.View):
 
         how_to_play_field6 = (
             "5. **Have fun!** Remember to **`/leave`** when you're finished **so others can play too**.\n\n"
-            ":scroll: Use **`/help pug`** for the full list of commands."
+            ":scroll: Use **`/help`** for the full list of commands."
             )
 
         how_to_play_embed.add_field(name="", value=how_to_play_field1, inline=False)
@@ -204,24 +204,22 @@ class Pug(commands.Cog):
             # Clear queue
             self.queue_handler.pop(channel_id, None)
 
-            # # Refresh panel and change nickname
-            await self.refresh_panel(channel_id)
-            await asyncio.sleep(1)
+            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            guild = channel.guild
 
-            await self.change_nickname(channel_id)
-            await asyncio.sleep(1)
-
-            if channel_id in self.queue_handler:
-                return
+            log.info(f"Clearing PUG queue in {channel}, {guild}...")
 
             # Notify channel that queue has been cleared
-            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
-
             await channel.send(
                 f"PUG queue has been cleared of all players due to {int(QUEUE_TIMEOUT // (60*60))} hours of inactivity. :pouring_liquid:")
 
-            guild = channel.guild
-            log.info(f"Clearing PUG queue in {channel}, {guild}...")
+            # # Refresh panel and change nickname
+            await self.refresh_panel(channel_id)
+            await asyncio.sleep(1)
+            await self.change_nickname(channel_id)
+
+            if channel_id in self.queue_handler:
+                return
 
         except asyncio.CancelledError:
             pass
@@ -246,14 +244,14 @@ class Pug(commands.Cog):
             self.timeout_tasks.pop(channel_id, None)
 
     # Function to resolve interaction channel (bot must only take inputs from the channel it is being used in)
-    def get_queue(self, channel_id):
+    def resolve_queue(self, channel_id):
         if channel_id not in self.queue_handler:
             self.queue_handler[channel_id] = {"players": []}
         return self.queue_handler[channel_id]
 
     # Build PUG panel embed
     def build_main_panel_embed(self, channel_id: int):
-        queue = self.get_queue(channel_id)
+        queue = self.resolve_queue(channel_id)
 
         description=("Join the queue to play!\n\n"
                     "**Competitive rules apply**. Click **How to Play** for more info.")
@@ -323,6 +321,7 @@ class Pug(commands.Cog):
             try:
                 msg = await channel.fetch_message(panel_message)
                 await msg.edit(embed=panel, view=main_buttons)
+                await asyncio.sleep(0.5)
             except discord.NotFound:
                 pass
 
@@ -362,8 +361,8 @@ class Pug(commands.Cog):
 
     # Change nickname according to the number of players in queue
     async def change_nickname(self, channel_id: int):
-        queue = self.get_queue(channel_id)
-        players = len(queue['players'])
+        queue = self.queue_handler.get(channel_id)
+        players = len(queue['players']) if queue else 0
 
         channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
         guild = channel.guild
@@ -396,7 +395,7 @@ class Pug(commands.Cog):
 
     # Function to add player to queue
     async def add_player(self, user_id: int, channel_id: int):
-        queue = self.get_queue(channel_id)
+        queue = self.resolve_queue(channel_id)
 
         if user_id in queue['players']:
             return "already queued"
@@ -413,7 +412,7 @@ class Pug(commands.Cog):
 
     # Function to remove player from queue
     async def remove_player(self, user_id: int, channel_id: int):
-        queue = self.get_queue(channel_id)
+        queue = self.resolve_queue(channel_id)
 
         if user_id not in queue['players']:
             return "not in queue"
@@ -453,7 +452,7 @@ class Pug(commands.Cog):
     # Command to join the queue
     @app_commands.command(name="join", description="Join the PUG queue")
     async def join_command(self, interaction: discord.Interaction):
-        queue = self.get_queue(interaction.channel_id)
+        queue = self.resolve_queue(interaction.channel_id)
 
         result = await self.add_player(interaction.user.id, interaction.channel_id)
         if result == "already queued":
@@ -470,7 +469,7 @@ class Pug(commands.Cog):
     # Command to leave the queue
     @app_commands.command(name="leave", description="Leave the PUG queue")
     async def leave_command(self, interaction: discord.Interaction):
-        queue = self.get_queue(interaction.channel_id)
+        queue = self.resolve_queue(interaction.channel_id)
 
         result = await self.remove_player(interaction.user.id, interaction.channel_id)
         if result == "not in queue":
@@ -484,7 +483,7 @@ class Pug(commands.Cog):
     # Command to remove a player from the queue
     @remove_group.command(name="player", description="Remove a player from the PUG queue")
     async def remove_player_command(self, interaction: discord.Interaction, player: discord.Member):
-        queue = self.get_queue(interaction.channel_id)
+        queue = self.resolve_queue(interaction.channel_id)
 
         result = await self.remove_player(player.id, interaction.channel_id)
         if not result:
@@ -507,7 +506,7 @@ class Pug(commands.Cog):
 
     @remove_group.command(name="all", description="Remove all players from the PUG queue")
     async def remove_all_command(self, interaction: discord.Interaction):
-        queue = self.get_queue(interaction.channel_id)
+        queue = self.resolve_queue(interaction.channel_id)
 
         if queue["players"]:
             user_ids = queue["players"]
@@ -536,7 +535,7 @@ class Pug(commands.Cog):
                     pass
         else:
             await interaction.response.send_message(
-            f"There are no players in this queue.", ephemeral=True)
+            "There are no players in this queue.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Pug(bot))
