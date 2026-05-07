@@ -68,23 +68,27 @@ async def handle_timeout(bot: commands.Bot, channel_id):
         # Clear map selection
         state_handler.pop(channel_id, None)
 
-        await channel.send(
-            f"Map selection has timed out after {int(MAP_SELECTION_TIMEOUT // (60*60))} hours of inactivity and has been cleared. :pouring_liquid:")
-
         guild = channel.guild
         log.info(f"Clearing map selection in {channel}, {guild}...")
+
+        # Notify channel that map selection has been cleared
+        await channel.send(
+            f"Map selection has timed out after {int(MAP_SELECTION_TIMEOUT // (60*60))} hours of inactivity and has been cleared. :pouring_liquid:")
 
     except asyncio.CancelledError:
         pass
 
     finally:
         # Clean up timeout task
-        timeout_tasks.pop(channel_id, None)
+        current = timeout_tasks.get(channel_id)
+        if current is asyncio.current_task():
+            timeout_tasks.pop(channel_id, None)
 
 # Function to restart the timeout counter
 def restart_timeout_task(bot: commands.Bot, channel_id):
     if channel_id in timeout_tasks:
         timeout_tasks[channel_id].cancel()
+        timeout_tasks.pop(channel_id, None)
 
     task = asyncio.create_task(handle_timeout(bot, channel_id))
     timeout_tasks[channel_id] = task
@@ -615,7 +619,9 @@ class Tourney(commands.Cog):
         # Checks if the correct team has banned first and resets the ban phase if not
         elif (not team1_bans and team2_bans and team1 == first_to_ban) or (team1_bans and not team2_bans and team2 == first_to_ban):
             selection_state["bans"] = {"team1": [], "team2": []}
+
             selection_state["remaining_maps"] = copy.deepcopy(MAPS)
+
             await interaction.response.send_message(
                 "Illegal selection state detected. Resetting ban phase.\n\n"
                 f"**{selection_state['ban_order'][0]}**, please ban a map using **`/map_ban`**.")
@@ -679,17 +685,18 @@ class Tourney(commands.Cog):
                 f"{banning_team_mention} has banned: **__{banned_map}__**\n\n"
                 "**Banning phase complete!** :ballot_box_with_check:",
                 allowed_mentions=discord.AllowedMentions(roles=False))
+            
+            log.info("Banning phase completed in channel: %s | remaining=%s",
+                     interaction.channel_id,
+                     list(selection_state["remaining_maps"].keys())
+                     )
 
             await asyncio.sleep(0.5)
+
             await interaction.followup.send(
                 f":exclamation: **{picking_team_mention}**, please pick a map using **`/map_pick`**.",
                 allowed_mentions=discord.AllowedMentions(roles=False)
             )
-
-        log.debug("Banning phase completed in channel: %s | remaining=%s",
-                  interaction.channel_id,
-                  list(selection_state["remaining_maps"].keys())
-                  )
 
         # Restarts the timeout counter when a command is used on time
         restart_timeout_task(interaction.client, interaction.channel_id)
@@ -759,7 +766,7 @@ class Tourney(commands.Cog):
 
         team_key = "team1" if picking_team == team1 else "team2"
 
-        if "INVOKE WILDCARD" in map:
+        if map == "INVOKE WILDCARD":
 
             wildcard_maps = [map_key for map_key, map_info in selection_state["remaining_maps"].items() if map_info["pool"] == "Wildcard"]
 
@@ -805,16 +812,16 @@ class Tourney(commands.Cog):
                 f":exclamation: **{next_team_mention}** - pick a map using **`/map_pick`**.",
                 allowed_mentions=discord.AllowedMentions(roles=False))
 
-        if all(selection_state["picks"].values()):
+        elif all(selection_state["picks"].values()):
             await interaction.response.send_message(
                 f"{picking_team_mention} has {added_text}: **__{picked_map}__**\n\n"
                 "**Picking phase complete! :ballot_box_with_check:**\n\n",
                 allowed_mentions=discord.AllowedMentions(roles=False))
 
-            log.debug("Picking phase completed in channel: %s | remaining=%s",
-                      interaction.channel_id,
-                      list(selection_state["remaining_maps"].keys())
-                      )
+            log.info("Picking phase completed in channel: %s | remaining=%s",
+                     interaction.channel_id,
+                     list(selection_state["remaining_maps"].keys())
+                     )
 
             if len(MAP_POOLS) == 1:
                 final_maps = list(selection_state["remaining_maps"].keys())
@@ -829,9 +836,7 @@ class Tourney(commands.Cog):
                 if selection_state["scheduled_event"]["start"] and selection_state["scheduled_event"]["duration"]:
                     state_handler.pop(interaction.channel_id, None)
                     await clear_timeout(interaction.channel_id)
-                else:
-                    # Restarts the timeout counter when a command is used on time
-                    restart_timeout_task(interaction.client, interaction.channel_id)
+                    return
 
             else:
                 team1_mention = get_team_mention(interaction, team1, TEAMS)
@@ -843,6 +848,9 @@ class Tourney(commands.Cog):
                 f":exclamation: **{team1_mention}** and **{team2_mention}** can finalize the map selection process by using **`/map_final`**.\n\n"
                 "-# To invoke the Wildcard, both teams must agree. Otherwise, the selection will default to the Standard map pool.",
                 allowed_mentions=discord.AllowedMentions(roles=False))
+            
+        # Restarts the timeout counter when a command is used on time
+        restart_timeout_task(interaction.client, interaction.channel_id)
 
     # Show user the choice of maps to pick
     @map_pick_command.autocomplete('map')
@@ -993,7 +1001,7 @@ class Tourney(commands.Cog):
 
         if not selection_state:
             await interaction.response.send_message(
-                "Teams have not been set. Please use `/match` first to start map selection.", ephemeral=True)
+                "Teams have not been set. Please use **`/match`** first to start map selection.", ephemeral=True)
             return
 
         if not user_can_override(interaction.user):
