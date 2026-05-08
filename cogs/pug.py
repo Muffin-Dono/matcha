@@ -226,7 +226,9 @@ class Pug(commands.Cog):
 
         finally:
             # Clean up timeout task
-            self.timeout_tasks.pop(channel_id, None)
+            current = self.timeout_tasks.get(channel_id)
+            if current is asyncio.current_task():
+                self.timeout_tasks.pop(channel_id, None)
 
     # Function to restart the timeout counter
     def restart_timeout_task(self, channel_id):
