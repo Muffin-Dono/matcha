@@ -54,7 +54,8 @@ class MoreButtons(discord.ui.View):
             await interaction.response.send_message(f":bell: **Ping Queue** is on cooldown. Try again in {minutes} minutes. :hourglass_flowing_sand:", ephemeral=True)
             return
 
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.send_message(f"**{interaction.user.mention} has pinged everyone in the queue! :bell:**",
+                                        allowed_mentions=discord.AllowedMentions(users=True))
 
         for user_id in queue['players'][:10]:
             player = interaction.guild.get_member(user_id) or await interaction.guild.fetch_member(user_id)
@@ -66,9 +67,6 @@ class MoreButtons(discord.ui.View):
                                 allowed_mentions=discord.AllowedMentions(users=False))
             except discord.Forbidden:
                 pass
-
-        await interaction.followup.send(f"**{interaction.user.mention} has pinged everyone in the queue! :bell:**",
-                                        allowed_mentions=discord.AllowedMentions(users=True))
 
     @discord.ui.button(label="Map Vote", style=discord.ButtonStyle.blurple, emoji="\U0001f5fa")
     async def map_vote_button(self, interaction, button):
