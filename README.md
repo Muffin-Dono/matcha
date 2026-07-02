@@ -107,7 +107,7 @@ To host the **Matcha** bot yourself, follow these steps:
 
 ---
 
-## Future Developments
+## Roadmap
 - [x] Add support for queueing pick-up games
 - [x] Add support for scheduling events
 - [ ] Merge and streamline tourney commands
