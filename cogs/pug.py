@@ -65,6 +65,7 @@ class MoreButtons(discord.ui.View):
                                 f"> <#{interaction.channel_id}>\n\n"
                                 "Gather in VC and make teams! :sound:",
                                 allowed_mentions=discord.AllowedMentions(users=False))
+                await asyncio.sleep(0.5)
             except discord.Forbidden:
                 pass
 
@@ -250,7 +251,7 @@ class Pug(commands.Cog):
         return self.queue_handler[channel_id]
 
     # Build PUG panel embed
-    def build_main_panel_embed(self, channel_id: int):
+    def build_main_panel_embed(self, channel_id: int, expired=0):
         queue = self.resolve_queue(channel_id)
 
         description=("Join the queue to play!\n\n"
@@ -265,6 +266,14 @@ class Pug(commands.Cog):
         embed.set_author(name="Matcha", url="https://github.com/Muffin-Dono/matcha")
 
         embed.add_field(name="", value="\u00AD", inline=False)
+
+        if expired == 1:
+            embed.add_field(
+                name="",
+                value=":exclamation: **__Panel expired - queue info may no longer be correct__** :exclamation:",
+                inline=False)
+
+            embed.add_field(name="", value="\u00AD", inline=False)
 
         if not queue['players']:
             embed.add_field(name="Player Queue", value="Queue is empty :dash:", inline=False)
@@ -317,11 +326,31 @@ class Pug(commands.Cog):
         panel = self.build_main_panel_embed(channel_id)
         main_buttons = MainButtons()
 
-        for panel_message in reversed(self.panel_messages[channel_id]):
+        # Update two most recent panels
+        for panel_message in reversed(self.panel_messages[channel_id][-2:]):
             try:
                 msg = await channel.fetch_message(panel_message)
                 await msg.edit(embed=panel, view=main_buttons)
                 await asyncio.sleep(0.5)
+            except discord.NotFound:
+                pass
+
+    # Retire PUG panel embed
+    async def retire_panel(self, channel_id: int):
+        if channel_id not in self.panel_messages:
+            return
+
+        # Create necessary variables for retiring panels
+        channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+        expired_panel = self.build_main_panel_embed(channel_id, expired=1)
+        main_buttons = MainButtons()
+
+        if len(self.panel_messages[channel_id]) >= 3:
+            panel_message = self.panel_messages[channel_id][0]
+
+            try:
+                msg = await channel.fetch_message(panel_message)
+                await msg.edit(embed=expired_panel, view=main_buttons)
             except discord.NotFound:
                 pass
 
@@ -448,6 +477,9 @@ class Pug(commands.Cog):
 
         # Only store up to 3 messages
         self.panel_messages[interaction.channel_id] = self.panel_messages[interaction.channel_id][-3:]
+
+        # Retire old panels
+        await self.retire_panel(interaction.channel_id)
 
     # Command to join the queue
     @app_commands.command(name="join", description="Join the PUG queue")
