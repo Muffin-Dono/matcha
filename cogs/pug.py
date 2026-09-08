@@ -516,7 +516,7 @@ class Pug(commands.Cog):
         queue = self.resolve_queue(interaction.channel_id)
 
         result = await self.remove_player(player.id, interaction.channel_id)
-        if not result:
+        if result == "not in queue":
             await interaction.response.send_message("Player is not in the queue.", allowed_mentions=None, ephemeral=True)
             return
 
