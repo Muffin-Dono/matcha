@@ -110,8 +110,10 @@ To host the **Matcha** bot yourself, follow these steps:
 ## Roadmap
 - [x] Add support for queueing pick-up games
 - [x] Add support for scheduling events
-- [ ] Merge and streamline tourney commands
+- [ ] Merge and streamline commands for map selection under the `/match` command group
+- [ ] Consider adding a setup cog for server admins to configure Matcha
+- [ ] Add support for dynamically configurable team sizes
 - [ ] Add new tourney command for posting match results
-- [ ] Add views (buttons, dropdowns) to map selection
 - [ ] Add data persistence (save data across restarts/updates)
+- [ ] Add views (buttons, dropdowns) to map selection
 - [ ] Make bot format-agnostic and allow support for more types of tournaments (or even different games)
